@@ -3,6 +3,7 @@ const VIEW_TITLES = {
   order: "Order Permits",
   history: "Permit History",
   blankets: "Blanket Permits",
+  drivers: "Driver Database",
   settings: "Payment & Settings",
 };
 

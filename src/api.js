@@ -23,11 +23,31 @@ export const PERMIT_TYPES = [
 ];
 
 // ── Mock data ─────────────────────────────────────────────────────────
-const MOCK_DRIVERS = [
-  { id: "D001", name: "Jonattan Vazquez Perez", tractor: "F894" },
-  { id: "D002", name: "Mario Lopez", tractor: "F712" },
-  { id: "D003", name: "Roberto Campos", tractor: "T211" },
-  { id: "D004", name: "Pedro Gomez", tractor: "T305" },
+export const DRIVER_TYPES = [
+  { value: "F", label: "F — Fleet" },
+  { value: "LP", label: "LP — Lease Purchase" },
+  { value: "T", label: "T — Temporary" },
+  { value: "OT", label: "OT — Owner/Operator (Truck)" },
+  { value: "BC", label: "BC — Business Carrier" },
+  { value: "AC", label: "AC — Authority Carrier" },
+  { value: "WC", label: "WC — Walk-in Carrier" },
+];
+
+export const COMPANY_TYPES = ["F", "LP", "T"];
+
+export const COMPANY_DEFAULTS = {
+  usdot: "2582238",
+  insuranceCompany: "Prime Property and Casualty",
+  insuranceEffective: "04/11/2025",
+  insuranceExpiration: "04/11/2026",
+  policyNumber: "PC24040671",
+};
+
+let MOCK_DRIVERS = [
+  { id: "D001", firstName: "Jonattan", lastName: "Vazquez Perez", tractor: "F894", driverType: "F", year: "2016", make: "Freightliner", vin: "3HSDJAPRXGN030818", tagNumber: "FL-1234", tagState: "FL", usdot: "2582238", fein: "", insuranceCompany: "Prime Property and Casualty", insuranceEffective: "04/11/2025", insuranceExpiration: "04/11/2026", policyNumber: "PC24040671" },
+  { id: "D002", firstName: "Mario", lastName: "Lopez", tractor: "F712", driverType: "LP", year: "2018", make: "Peterbilt", vin: "1XPBDP9X3HD123456", tagNumber: "FL-5678", tagState: "FL", usdot: "2582238", fein: "", insuranceCompany: "Prime Property and Casualty", insuranceEffective: "04/11/2025", insuranceExpiration: "04/11/2026", policyNumber: "PC24040671" },
+  { id: "D003", firstName: "Roberto", lastName: "Campos", tractor: "T211", driverType: "OT", year: "2019", make: "Kenworth", vin: "3AKJHHDR7JSJA4532", tagNumber: "TX-9012", tagState: "TX", usdot: "3847291", fein: "84-7291003", insuranceCompany: "National Indemnity", insuranceEffective: "01/15/2026", insuranceExpiration: "01/15/2027", policyNumber: "NI-2026-4532" },
+  { id: "D004", firstName: "Pedro", lastName: "Gomez", tractor: "T305", driverType: "BC", year: "2020", make: "Freightliner", vin: "1FUJHHDR0HLHU8932", tagNumber: "GA-3456", tagState: "GA", usdot: "4112983", fein: "41-1298300", insuranceCompany: "Great West Casualty", insuranceEffective: "06/01/2025", insuranceExpiration: "06/01/2026", policyNumber: "GW-8932-26" },
 ];
 
 const MOCK_BLANKETS = [
@@ -59,7 +79,9 @@ function mock(data, delay = 400) {
 
 // ── API functions ─────────────────────────────────────────────────────
 export async function fetchDrivers() {
-  if (USE_MOCK) return mock([...MOCK_DRIVERS], 300);
+  if (USE_MOCK) {
+    return mock(MOCK_DRIVERS.map((d) => ({ ...d, name: `${d.firstName} ${d.lastName}` })), 300);
+  }
   const res = await fetch(`${API_BASE}/api/drivers`);
   return res.json();
 }
@@ -87,5 +109,45 @@ export async function fetchPermitHistory() {
 export async function fetchBlanketPermits() {
   if (USE_MOCK) return mock([...MOCK_BLANKETS], 300);
   const res = await fetch(`${API_BASE}/api/permits/blankets`);
+  return res.json();
+}
+
+// ── Driver CRUD ───────────────────────────────────────────────────────
+export async function createDriver(driver) {
+  if (USE_MOCK) {
+    const maxId = MOCK_DRIVERS.reduce((max, d) => Math.max(max, parseInt(d.id.slice(1))), 0);
+    const newDriver = { ...driver, id: `D${String(maxId + 1).padStart(3, "0")}` };
+    MOCK_DRIVERS.push(newDriver);
+    return mock({ ...newDriver, name: `${newDriver.firstName} ${newDriver.lastName}` }, 300);
+  }
+  const res = await fetch(`${API_BASE}/api/drivers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(driver),
+  });
+  return res.json();
+}
+
+export async function updateDriver(id, updates) {
+  if (USE_MOCK) {
+    const idx = MOCK_DRIVERS.findIndex((d) => d.id === id);
+    if (idx === -1) throw new Error("Driver not found");
+    MOCK_DRIVERS[idx] = { ...MOCK_DRIVERS[idx], ...updates };
+    return mock({ ...MOCK_DRIVERS[idx] }, 300);
+  }
+  const res = await fetch(`${API_BASE}/api/drivers/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  return res.json();
+}
+
+export async function deleteDriver(id) {
+  if (USE_MOCK) {
+    MOCK_DRIVERS = MOCK_DRIVERS.filter((d) => d.id !== id);
+    return mock({ success: true }, 300);
+  }
+  const res = await fetch(`${API_BASE}/api/drivers/${id}`, { method: "DELETE" });
   return res.json();
 }

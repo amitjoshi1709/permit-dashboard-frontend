@@ -3,6 +3,7 @@ const NAV_ITEMS = [
   { key: "order", label: "Order Permits", section: "Main", badge: "+" },
   { key: "history", label: "Permit History", section: "Records" },
   { key: "blankets", label: "Blanket Permits", section: "Records" },
+  { key: "drivers", label: "Driver Database", section: "Manage" },
   { key: "settings", label: "Payment & CC", section: "Settings" },
 ];
 

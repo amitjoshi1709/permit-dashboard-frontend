@@ -6,6 +6,7 @@ import DashboardView from "./components/DashboardView";
 import OrderForm from "./components/OrderForm";
 import HistoryTable from "./components/HistoryTable";
 import BlanketPermits from "./components/BlanketPermits";
+import DriversView from "./components/DriversView";
 import SettingsView from "./components/SettingsView";
 
 export default function App() {
@@ -30,6 +31,8 @@ export default function App() {
         return <HistoryTable />;
       case "blankets":
         return <BlanketPermits onToast={showToast} />;
+      case "drivers":
+        return <DriversView onToast={showToast} />;
       case "settings":
         return <SettingsView onToast={showToast} />;
       default:
