@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mega Trucking — Permit Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --navy: #0D1B2A;
+  --navy2: #162234;
+  --navy3: #1D2E44;
+  --navy4: #243550;
+  --steel: #2C4B6E;
+  --mid: #3A6898;
+  --accent: #4A9DDA;
+  --accent2: #5BB8F5;
+  --gold: #F5A623;
+  --gold2: #FFB733;
+  --green: #27AE60;
+  --green2: #2ECC71;
+  --red: #E74C3C;
+  --red2: #FF6B5B;
+  --orange: #F39C12;
+  --text1: #EDF2F7;
+  --text2: #A8BAD0;
+  --text3: #6B8CAE;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --radius: 10px;
+  --radius2: 14px;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--navy);
+  color: var(--text1);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* LAYOUT */
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: var(--navy2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+}
+
+.logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.logo-mark {
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.logo-text { font-weight: 600; font-size: 15px; line-height: 1.2; }
+.logo-sub { font-size: 10px; color: var(--text3); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
+
+.nav { flex: 1; padding: 10px 0; }
+.nav-section-label {
+  font-size: 10px; color: var(--text3); letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 10px 18px 4px; font-weight: 500;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 18px; font-size: 13.5px; font-weight: 400;
+  color: var(--text2); cursor: pointer; transition: all 0.15s;
+  border-radius: 0;
+}
+.nav-item:hover { background: var(--navy3); color: var(--text1); }
+.nav-item.active { background: var(--navy3); color: var(--accent2); font-weight: 500; }
+.nav-item.active .nav-dot { background: var(--accent2); }
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+.nav-badge {
+  margin-left: auto; background: var(--accent);
+  color: white; font-size: 10px; font-weight: 600;
+  border-radius: 10px; padding: 1px 6px; min-width: 18px; text-align: center;
+}
+
+.sidebar-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+.user-chip {
+  display: flex; align-items: center; gap: 8px;
+}
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--steel); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0;
+}
+.user-name { font-size: 12px; font-weight: 500; }
+.user-role { font-size: 10px; color: var(--text3); }
+
+/* MAIN */
+.main { margin-left: 220px; flex: 1; }
+
+.topbar {
+  background: var(--navy2);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 50;
+}
+.page-title { font-size: 16px; font-weight: 600; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.btn-primary {
+  background: var(--accent); color: white;
+  border: none; padding: 8px 16px; border-radius: 8px;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+.btn-secondary {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border2); padding: 8px 14px; border-radius: 8px;
+  font-family: inherit; font-size: 13px; cursor: pointer; transition: all 0.15s;
+}
+.btn-secondary:hover { background: var(--navy3); color: var(--text1); }
+
+.content { padding: 24px 28px; }
+
+/* STATS ROW */
+.stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--navy2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  padding: 16px 18px;
+  position: relative; overflow: hidden;
+}
+.stat-card::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+}
+.stat-card.blue::before { background: var(--accent); }
+.stat-card.gold::before { background: var(--gold); }
+.stat-card.green::before { background: var(--green); }
+.stat-card.red::before { background: var(--red); }
+.stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-bottom: 6px; }
+.stat-value { font-size: 26px; font-weight: 600; line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+/* TWO COLUMN */
+.two-col { display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
+
+.panel {
+  background: var(--navy2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+.panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.panel-title { font-size: 13.5px; font-weight: 600; }
+.panel-count { font-size: 11px; color: var(--text3); background: var(--navy3); border-radius: 10px; padding: 2px 8px; }
+.panel-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* PERMIT TABLE */
+.permit-table { width: 100%; border-collapse: collapse; }
+.permit-table th {
+  text-align: left; padding: 10px 14px;
+  font-size: 11px; color: var(--text3); font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+  background: var(--navy3);
+}
+.permit-table td {
+  padding: 11px 14px; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.permit-table tr:last-child td { border-bottom: none; }
+.permit-table tbody tr { transition: background 0.12s; cursor: pointer; }
+.permit-table tbody tr:hover { background: var(--navy3); }
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+}
+.badge-trip { background: rgba(74,157,218,0.15); color: var(--accent2); }
+.badge-fuel { background: rgba(245,166,35,0.15); color: var(--gold2); }
+.badge-active { background: rgba(39,174,96,0.15); color: #3EDB7A; }
+.badge-expired { background: rgba(231,76,60,0.15); color: var(--red2); }
+.badge-pending { background: rgba(243,156,18,0.15); color: #FFD166; }
+
+.driver-chip {
+  display: flex; align-items: center; gap: 7px;
+}
+.driver-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--steel); display: flex; align-items: center;
+  justify-content: center; font-size: 9px; font-weight: 600;
+  flex-shrink: 0; color: var(--accent2);
+}
+
+/* BLANKET PERMITS PANEL */
+.blanket-list { padding: 10px 0; }
+.blanket-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.blanket-item:last-child { border-bottom: none; }
+.blanket-state {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--navy3); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700;
+  color: var(--accent2); letter-spacing: 0.04em; flex-shrink: 0;
+}
+.blanket-info { flex: 1; }
+.blanket-driver { font-weight: 500; font-size: 12.5px; }
+.blanket-exp { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.blanket-status { flex-shrink: 0; }
+
+/* INPUT SEARCH */
+.search-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--navy3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 12px;
+}
+.search-bar input {
+  background: none; border: none; outline: none;
+  color: var(--text1); font-family: inherit; font-size: 13px;
+  width: 180px;
+}
+.search-bar input::placeholder { color: var(--text3); }
+
+/* MODAL */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(5, 12, 22, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--navy2);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  width: 600px; max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  transform: translateY(12px);
+  transition: transform 0.2s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-head {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between;
+}
+.modal-title { font-size: 16px; font-weight: 600; }
+.modal-subtitle { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.close-btn {
+  background: var(--navy3); border: 1px solid var(--border);
+  color: var(--text2); width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.close-btn:hover { background: var(--navy4); color: var(--text1); }
+.modal-body { padding: 20px 24px; }
+
+/* FORM STYLES */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.form-row.full { grid-template-columns: 1fr; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.field label {
+  display: block; font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text3); margin-bottom: 5px;
+}
+.field select, .field input {
+  width: 100%; background: var(--navy3);
+  border: 1px solid var(--border2); border-radius: 8px;
+  color: var(--text1); font-family: inherit; font-size: 13px;
+  padding: 9px 12px; outline: none; transition: border 0.15s;
+}
+.field select:focus, .field input:focus { border-color: var(--accent); }
+.field select { cursor: pointer; }
+
+/* PERMIT CHECK ALERT */
+.check-alert {
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12.5px; margin-bottom: 14px;
+  display: flex; align-items: flex-start; gap: 8px;
+  line-height: 1.4;
+}
+.check-alert.skip { background: rgba(39,174,96,0.12); border: 1px solid rgba(39,174,96,0.25); color: #5CD88F; }
+.check-alert.order { background: rgba(74,157,218,0.1); border: 1px solid rgba(74,157,218,0.2); color: var(--accent2); }
+.check-alert.warn { background: rgba(243,156,18,0.1); border: 1px solid rgba(243,156,18,0.25); color: #FFD166; }
+.alert-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+/* SECTION HEADER */
+.section-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text3); font-weight: 500; margin-bottom: 10px;
+}
+
+.divider {
+  border: none; border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+
+/* PERMIT STATES GRID */
+.states-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;
+}
+.state-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--navy3); border-radius: 8px; padding: 10px 12px;
+  border: 1px solid var(--border);
+}
+.state-code {
+  font-size: 11px; font-weight: 700; color: var(--accent2);
+  width: 22px; text-align: center;
+}
+.state-name { font-size: 12px; flex: 1; }
+.state-action { font-size: 11px; font-weight: 500; }
+.state-action.skip-tag { color: #5CD88F; }
+.state-action.order-tag { color: var(--accent2); }
+
+/* CC CARD DISPLAY */
+.cc-card {
+  background: var(--navy3); border: 1px solid var(--border2);
+  border-radius: 10px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+.cc-brand {
+  background: var(--accent); border-radius: 5px;
+  font-size: 10px; font-weight: 700; color: white;
+  padding: 3px 6px; letter-spacing: 0.05em;
+}
+.cc-details { flex: 1; }
+.cc-number { font-family: 'DM Mono', monospace; font-size: 13px; }
+.cc-name { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.cc-expiry { font-size: 11px; color: var(--text3); text-align: right; }
+.cc-edit-btn {
+  background: transparent; border: 1px solid var(--border2);
+  color: var(--text2); border-radius: 6px; padding: 5px 10px;
+  font-size: 11px; cursor: pointer; font-family: inherit;
+  transition: all 0.15s;
+}
+.cc-edit-btn:hover { background: var(--navy4); color: var(--text1); }
+
+/* TABS */
+.tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+.tab {
+  padding: 10px 16px; font-size: 13px; cursor: pointer;
+  color: var(--text3); border-bottom: 2px solid transparent;
+  margin-bottom: -1px; transition: all 0.15s;
+}
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); font-weight: 500; }
+.tab:hover:not(.active) { color: var(--text2); }
+
+/* PDF DOWNLOAD BUTTON */
+.pdf-btn {
+  background: var(--navy3); border: 1px solid var(--border);
+  color: var(--text2); border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: inherit; transition: all 0.15s;
+}
+.pdf-btn:hover { background: var(--navy4); color: var(--accent2); border-color: var(--accent); }
+
+/* TOAST */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--navy2); border: 1px solid var(--border2);
+  border-radius: 10px; padding: 12px 18px;
+  font-size: 13px; color: var(--text1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 2000; transform: translateY(20px);
+  opacity: 0; transition: all 0.25s; max-width: 320px;
+  display: flex; align-items: center; gap: 10px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast-icon { font-size: 16px; }
+
+/* SETTINGS PANEL */
+.settings-section { margin-bottom: 22px; }
+.settings-section .section-label { margin-bottom: 12px; }
+
+/* FILTER BAR */
+.filter-bar { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.filter-chip {
+  padding: 5px 12px; border-radius: 6px; font-size: 12px;
+  background: var(--navy3); border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer; transition: all 0.15s;
+}
+.filter-chip.active { background: rgba(74,157,218,0.15); border-color: rgba(74,157,218,0.4); color: var(--accent2); font-weight: 500; }
+.filter-chip:hover:not(.active) { background: var(--navy4); color: var(--text1); }
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center; padding: 40px;
+  color: var(--text3); font-size: 13px;
+}
+.empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+/* VIEW PAGES */
+.view { display: none; }
+.view.active { display: block; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--navy); }
+::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 10px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-icon">🚛</div>
+        <div>
+          <div class="logo-text">Mega Trucking</div>
+          <div class="logo-sub">Permit Hub</div>
+        </div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section-label">Main</div>
+      <div class="nav-item active" onclick="showView('dashboard')">
+        <span class="nav-dot"></span> Dashboard
+      </div>
+      <div class="nav-item" onclick="showView('order')">
+        <span class="nav-dot"></span> Order Permits
+        <span class="nav-badge">+</span>
+      </div>
+      <div class="nav-section-label">Records</div>
+      <div class="nav-item" onclick="showView('history')">
+        <span class="nav-dot"></span> Permit History
+      </div>
+      <div class="nav-item" onclick="showView('blankets')">
+        <span class="nav-dot"></span> Blanket Permits
+        <span class="nav-badge">6</span>
+      </div>
+      <div class="nav-section-label">Settings</div>
+      <div class="nav-item" onclick="showView('settings')">
+        <span class="nav-dot"></span> Payment & CC
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="avatar">MC</div>
+        <div>
+          <div class="user-name">Michael Caballero</div>
+          <div class="user-role">Dispatcher</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="page-title" id="page-title">Dashboard</div>
+      <div class="topbar-right">
+        <div class="search-bar">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#6B8CAE" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="#6B8CAE" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input type="text" placeholder="Search permits, drivers..." id="search-input" oninput="handleSearch(this.value)">
+        </div>
+        <button class="btn-primary" onclick="openOrderModal()">+ New Permit</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD VIEW -->
+      <div class="view active" id="view-dashboard">
+        <div class="stats-row">
+          <div class="stat-card blue">
+            <div class="stat-label">Active Permits</div>
+            <div class="stat-value">24</div>
+            <div class="stat-sub">6 expiring this week</div>
+          </div>
+          <div class="stat-card gold">
+            <div class="stat-label">Pending Payment</div>
+            <div class="stat-value">3</div>
+            <div class="stat-sub">$93 total</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">Issued This Month</div>
+            <div class="stat-value">41</div>
+            <div class="stat-sub">GA Trip + Fuel</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-label">Blanket Permits</div>
+            <div class="stat-value">6</div>
+            <div class="stat-sub">Across 4 drivers</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Recent Permits</div>
+              <span class="panel-count">Last 10</span>
+              <div class="panel-actions">
+                <button class="btn-secondary" style="font-size:12px;padding:5px 10px;" onclick="showView('history')">View all</button>
+              </div>
+            </div>
+            <div id="dashboard-table-container"></div>
+          </div>
+
+          <div>
+            <div class="panel" style="margin-bottom:14px;">
+              <div class="panel-header">
+                <div class="panel-title">Blanket Permits on File</div>
+              </div>
+              <div class="blanket-list" id="blanket-mini"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Quick Actions</div>
+              </div>
+              <div style="padding:14px;">
+                <button class="btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="openOrderModal()">+ Order New Permit</button>
+                <button class="btn-secondary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="showView('blankets')">Manage Blanket Permits</button>
+                <button class="btn-secondary" style="width:100%;justify-content:center;" onclick="showView('settings')">Update Credit Card</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ORDER VIEW -->
+      <div class="view" id="view-order">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">New Permit Request</div>
+            <span class="panel-count">GA Trip &amp; Fuel</span>
+          </div>
+          <div style="padding:24px;">
+            <div class="tabs">
+              <div class="tab active" onclick="setTab('trip')">Trip Permit (ITP)</div>
+              <div class="tab" onclick="setTab('fuel')">Fuel Permit (MFTP)</div>
+            </div>
+            <div id="order-form-content"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTORY VIEW -->
+      <div class="view" id="view-history">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Permit History</div>
+            <div class="panel-actions">
+              <select style="background:var(--navy3);border:1px solid var(--border);color:var(--text1);border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;" onchange="filterHistory(this.value)">
+                <option value="all">All Types</option>
+                <option value="ITP">Trip (ITP)</option>
+                <option value="MFTP">Fuel (MFTP)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-bar">
+            <div class="filter-chip active" onclick="filterHistoryStatus('all',this)">All</div>
+            <div class="filter-chip" onclick="filterHistoryStatus('Active',this)">Active</div>
+            <div class="filter-chip" onclick="filterHistoryStatus('Expired',this)">Expired</div>
+            <div class="filter-chip" onclick="filterHistoryStatus('Pending',this)">Pending</div>
+          </div>
+          <div id="history-table-container"></div>
+        </div>
+      </div>
+
+      <!-- BLANKETS VIEW -->
+      <div class="view" id="view-blankets">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Blanket Permits on File</div>
+            <div class="panel-actions">
+              <button class="btn-primary" style="font-size:12px;padding:6px 12px;" onclick="openAddBlanket()">+ Add Blanket</button>
+            </div>
+          </div>
+          <div id="blanket-full-list"></div>
+        </div>
+      </div>
+
+      <!-- SETTINGS VIEW -->
+      <div class="view" id="view-settings">
+        <div style="max-width:560px;">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Payment Methods</div>
+            </div>
+            <div style="padding:20px;">
+              <div class="settings-section">
+                <div class="section-label">Active Ramp Card</div>
+                <div id="cc-display"></div>
+                <button class="btn-secondary" onclick="openCCModal()" style="font-size:12px;padding:7px 14px;">Update Card Info</button>
+              </div>
+              <hr class="divider">
+              <div class="settings-section">
+                <div class="section-label">Receipt Delivery</div>
+                <div class="form-row">
+                  <div class="field">
+                    <label>Email</label>
+                    <input type="email" value="MICHAEL@MEGATRUCKINGLLC.COM">
+                  </div>
+                  <div class="field">
+                    <label>Phone (RingCentral)</label>
+                    <input type="tel" value="7869304305">
+                  </div>
+                </div>
+                <button class="btn-primary" style="font-size:12px;padding:7px 14px;" onclick="showToast('✓','Settings saved')">Save Settings</button>
+              </div>
+              <hr class="divider">
+              <div class="settings-section">
+                <div class="section-label">Georgia Portal Account</div>
+                <div class="form-row">
+                  <div class="field">
+                    <label>Account No.</label>
+                    <input type="text" value="82761" readonly style="opacity:0.6;cursor:not-allowed;">
+                  </div>
+                  <div class="field">
+                    <label>Billing Address</label>
+                    <input type="text" value="5979 NW 151ST ST STE 101">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<!-- ORDER MODAL -->
+<div class="modal-overlay" id="order-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Order Permit</div>
+        <div class="modal-subtitle">Georgia Trucking Portal · Account 82761</div>
+      </div>
+      <div class="close-btn" onclick="closeModal('order-modal')">×</div>
+    </div>
+    <div class="modal-body" id="modal-body-content"></div>
+  </div>
+</div>
+
+<!-- CC MODAL -->
+<div class="modal-overlay" id="cc-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Update Credit Card</div>
+        <div class="modal-subtitle">Used for Georgia portal payments</div>
+      </div>
+      <div class="close-btn" onclick="closeModal('cc-modal')">×</div>
+    </div>
+    <div class="modal-body">
+      <div class="check-alert warn"><span class="alert-icon">⚠</span>Card details are entered directly on the Georgia portal's payment page. Update the info below to pre-fill the form.</div>
+      <div class="form-row">
+        <div class="field full"><label>Name on Card</label><input type="text" id="cc-name-input" value="Michael Caballero"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Last 4 Digits</label><input type="text" id="cc-last4-input" value="4500" maxlength="4"></div>
+        <div class="field"><label>Expiration</label><input type="text" id="cc-exp-input" placeholder="MM/YY" value="••/••"></div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Billing City</label><input type="text" id="cc-city-input" value="MIAMI LAKES">
+        </div>
+        <div class="field">
+          <label>Postal Code</label><input type="text" id="cc-zip-input" value="33014">
+        </div>
+      </div>
+      <button class="btn-primary" style="width:100%;justify-content:center;margin-top:8px;" onclick="saveCCInfo()">Save Card Info</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD BLANKET MODAL -->
+<div class="modal-overlay" id="blanket-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Add Blanket Permit</div>
+        <div class="modal-subtitle">Record a blanket permit to prevent duplicate orders</div>
+      </div>
+      <div class="close-btn" onclick="closeModal('blanket-modal')">×</div>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="field">
+          <label>Driver</label>
+          <select id="blanket-driver">
+            <option>JVAZQUEZ</option><option>MLOPEZ</option><option>RCAMPOS</option><option>PGOMEZ</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>State</label>
+          <select id="blanket-state">
+            <option value="FL">Florida (FL)</option>
+            <option value="GA">Georgia (GA)</option>
+            <option value="SC">South Carolina (SC)</option>
+            <option value="NC">North Carolina (NC)</option>
+            <option value="TN">Tennessee (TN)</option>
+            <option value="AL">Alabama (AL)</option>
+            <option value="MS">Mississippi (MS)</option>
+            <option value="LA">Louisiana (LA)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Permit Number</label><input type="text" id="blanket-num" placeholder="e.g. BP-2026-001"></div>
+        <div class="field"><label>Expiration Date</label><input type="date" id="blanket-exp"></div>
+      </div>
+      <button class="btn-primary" style="width:100%;justify-content:center;margin-top:8px;" onclick="saveBlanket()">Add Blanket Permit</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toast-icon">✓</span>
+  <span id="toast-msg">Done</span>
+</div>
+
+<script>
+const DRIVERS = [
+  { id: 'JVAZQUE', name: 'JONATTAN VAZQUEZ PEREZ', type: 'F', usdot: '2582238', tractor: 'F894', vin: '3HSDJAPRXGN030818', state: 'FL' },
+  { id: 'MLOPEZ',  name: 'MARIO LOPEZ',             type: 'LP', usdot: '2582238', tractor: 'F712', vin: '1XPBDP9X3HD123456', state: 'FL' },
+  { id: 'RCAMPOS', name: 'ROBERTO CAMPOS',           type: 'OT', usdot: '3847291', tractor: 'T211', vin: '3AKJHHDR7JSJA4532', state: 'TX' },
+  { id: 'PGOMEZ',  name: 'PEDRO GOMEZ',              type: 'BC', usdot: '4112983', tractor: 'T305', vin: '1FUJHHDR0HLHU8932', state: 'GA' },
+];
+
+const BLANKETS = [
+  { driver: 'JVAZQUE', state: 'FL', exp: '12/31/2026', num: 'BP-FL-2026-001' },
+  { driver: 'MLOPEZ',  state: 'FL', exp: '12/31/2026', num: 'BP-FL-2026-002' },
+  { driver: 'PGOMEZ',  state: 'GA', exp: '06/30/2026', num: 'BP-GA-2026-001' },
+  { driver: 'JVAZQUE', state: 'SC', exp: '03/31/2026', num: 'BP-SC-2026-001' },
+  { driver: 'RCAMPOS', state: 'NC', exp: '09/30/2026', num: 'BP-NC-2026-001' },
+  { driver: 'MLOPEZ',  state: 'TN', exp: '07/15/2026', num: 'BP-TN-2026-001' },
+];
+
+let PERMITS = [
+  { id:'P0041', driver:'JVAZQUE', dname:'VAZQUEZ PEREZ, J.', type:'ITP', state:'GA', eff:'01/15/2026', exp:'01/22/2026', vin:'3HSDJAPRXGN030818', status:'Expired', fee:30 },
+  { id:'P0042', driver:'MLOPEZ',  dname:'LOPEZ, M.',          type:'MFTP', state:'GA', eff:'01/22/2026', exp:'01/31/2026', vin:'1XPBDP9X3HD123456', status:'Expired', fee:25 },
+  { id:'P0043', driver:'RCAMPOS', dname:'CAMPOS, R.',          type:'ITP', state:'GA', eff:'02/01/2026', exp:'02/08/2026', vin:'3AKJHHDR7JSJA4532', status:'Expired', fee:30 },
+  { id:'P0044', driver:'PGOMEZ',  dname:'GOMEZ, P.',           type:'MFTP', state:'GA', eff:'02/10/2026', exp:'02/28/2026', vin:'1FUJHHDR0HLHU8932', status:'Expired', fee:25 },
+  { id:'P0045', driver:'JVAZQUE', dname:'VAZQUEZ PEREZ, J.', type:'ITP', state:'GA', eff:'02/20/2026', exp:'02/27/2026', vin:'3HSDJAPRXGN030818', status:'Expired', fee:30 },
+  { id:'P0046', driver:'MLOPEZ',  dname:'LOPEZ, M.',          type:'ITP', state:'GA', eff:'03/01/2026', exp:'03/08/2026', vin:'1XPBDP9X3HD123456', status:'Active', fee:30 },
+  { id:'P0047', driver:'RCAMPOS', dname:'CAMPOS, R.',          type:'MFTP', state:'GA', eff:'03/05/2026', exp:'03/15/2026', vin:'3AKJHHDR7JSJA4532', status:'Active', fee:25 },
+  { id:'P0048', driver:'PGOMEZ',  dname:'GOMEZ, P.',           type:'ITP', state:'GA', eff:'03/10/2026', exp:'03/17/2026', vin:'1FUJHHDR0HLHU8932', status:'Active', fee:30 },
+  { id:'P0049', driver:'JVAZQUE', dname:'VAZQUEZ PEREZ, J.', type:'MFTP', state:'GA', eff:'03/12/2026', exp:'03/22/2026', vin:'3HSDJAPRXGN030818', status:'Active', fee:25 },
+  { id:'P0050', driver:'MLOPEZ',  dname:'LOPEZ, M.',          type:'ITP', state:'GA', eff:'03/15/2026', exp:'03/22/2026', vin:'1XPBDP9X3HD123456', status:'Pending', fee:30 },
+];
+
+let ccInfo = { name:'Michael Caballero', last4:'4500', exp:'••/••', city:'MIAMI LAKES', zip:'33014' };
+let currentTab = 'trip';
+let historyFilter = { type:'all', status:'all' };
+
+function showView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  const titles = { dashboard:'Dashboard', order:'Order Permits', history:'Permit History', blankets:'Blanket Permits', settings:'Payment & Settings' };
+  document.getElementById('page-title').textContent = titles[view] || view;
+  const idx = ['dashboard','order','history','blankets','settings'].indexOf(view);
+  if(idx >= 0) document.querySelectorAll('.nav-item')[idx].classList.add('active');
+  if(view==='order') renderOrderForm();
+  if(view==='history') renderHistoryTable();
+  if(view==='blankets') renderBlanketFull();
+  if(view==='settings') renderCCDisplay();
+}
+
+function initDashboard() {
+  renderDashboardTable();
+  renderBlanketMini();
+  renderCCDisplay();
+  renderOrderForm();
+  renderHistoryTable();
+  renderBlanketFull();
+}
+
+function renderDashboardTable() {
+  const rows = PERMITS.slice(-10).reverse().map(p => permRowHTML(p, false)).join('');
+  document.getElementById('dashboard-table-container').innerHTML = `<table class="permit-table"><thead><tr><th>ID</th><th>Driver</th><th>Type</th><th>Effective</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function permRowHTML(p, showFull) {
+  const typeBadge = p.type==='ITP' ? `<span class="badge badge-trip">ITP Trip</span>` : `<span class="badge badge-fuel">MFTP Fuel</span>`;
+  const statusBadge = p.status==='Active' ? `<span class="badge badge-active">Active</span>` : p.status==='Pending' ? `<span class="badge badge-pending">Pending</span>` : `<span class="badge badge-expired">Expired</span>`;
+  const initials = p.dname.split(',')[0].substring(0,2).toUpperCase();
+  return `<tr onclick="viewPermit('${p.id}')">
+    <td><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${p.id}</span></td>
+    <td><div class="driver-chip"><div class="driver-avatar">${initials}</div><span>${p.dname}</span></div></td>
+    <td>${typeBadge}</td>
+    <td>${p.eff}</td>
+    <td>${p.exp}</td>
+    <td>${statusBadge}</td>
+    <td><button class="pdf-btn" onclick="event.stopPropagation();downloadPDF('${p.id}')">↓ PDF</button></td>
+  </tr>`;
+}
+
+function renderBlanketMini() {
+  document.getElementById('blanket-mini').innerHTML = BLANKETS.slice(0,4).map(b => {
+    const d = DRIVERS.find(d=>d.id===b.driver);
+    const today = new Date(); const expDate = new Date(b.exp.replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2'));
+    const daysLeft = Math.round((expDate-today)/86400000);
+    const status = daysLeft<30 ? 'warn' : 'ok';
+    return `<div class="blanket-item">
+      <div class="blanket-state">${b.state}</div>
+      <div class="blanket-info">
+        <div class="blanket-driver">${d?d.name.split(' ')[0]+' '+d.name.split(' ')[1]:b.driver}</div>
+        <div class="blanket-exp">Expires ${b.exp} · #${b.num}</div>
+      </div>
+      <div class="blanket-status"><span class="badge ${status==='warn'?'badge-pending':'badge-active'}">${daysLeft<30?daysLeft+'d':'Active'}</span></div>
+    </div>`;
+  }).join('') + (BLANKETS.length>4?`<div style="padding:10px 18px;font-size:12px;color:var(--text3);text-align:center;cursor:pointer;" onclick="showView('blankets')">View ${BLANKETS.length-4} more →</div>`:'');
+}
+
+function renderBlanketFull() {
+  document.getElementById('blanket-full-list').innerHTML = BLANKETS.map(b => {
+    const d = DRIVERS.find(d=>d.id===b.driver);
+    const today = new Date(); const expDate = new Date(b.exp.replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2'));
+    const daysLeft = Math.round((expDate-today)/86400000);
+    return `<div class="blanket-item">
+      <div class="blanket-state">${b.state}</div>
+      <div class="blanket-info" style="flex:1;">
+        <div class="blanket-driver">${d?d.name:b.driver}</div>
+        <div class="blanket-exp">Permit #${b.num} · Expires ${b.exp}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="badge ${daysLeft<30?'badge-pending':'badge-active'}">${daysLeft<30?daysLeft+' days left':'Active'}</span>
+        <button class="pdf-btn" onclick="showToast('↓','Downloading blanket permit PDF...')">↓ PDF</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistoryTable() {
+  let data = [...PERMITS];
+  if(historyFilter.type!=='all') data=data.filter(p=>p.type===historyFilter.type);
+  if(historyFilter.status!=='all') data=data.filter(p=>p.status===historyFilter.status);
+  data = data.reverse();
+  if(!data.length) {
+    document.getElementById('history-table-container').innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>No permits match this filter.</div>';
+    return;
+  }
+  const rows = data.map(p => permRowHTML(p, true)).join('');
+  document.getElementById('history-table-container').innerHTML=`<table class="permit-table"><thead><tr><th>ID</th><th>Driver</th><th>Type</th><th>Effective</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function filterHistory(type) {
+  historyFilter.type = type;
+  renderHistoryTable();
+}
+function filterHistoryStatus(status, el) {
+  historyFilter.status = status;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderHistoryTable();
+}
+
+function renderCCDisplay() {
+  document.getElementById('cc-display').innerHTML = `<div class="cc-card">
+    <span class="cc-brand">VISA</span>
+    <div class="cc-details">
+      <div class="cc-number">•••• •••• •••• ${ccInfo.last4}</div>
+      <div class="cc-name">${ccInfo.name}</div>
+    </div>
+    <div class="cc-expiry">${ccInfo.exp}<br><span style="color:var(--text3);font-size:10px;">${ccInfo.city}, ${ccInfo.zip}</span></div>
+    <button class="cc-edit-btn" onclick="openCCModal()">Edit</button>
+  </div>`;
+}
+
+function renderOrderForm() {
+  document.getElementById('order-form-content').innerHTML = `
+    <div class="form-row">
+      <div class="field">
+        <label>Driver / Operator</label>
+        <select id="order-driver" onchange="checkBlankets()">
+          <option value="">— Select driver —</option>
+          ${DRIVERS.map(d=>`<option value="${d.id}">${d.name} (${d.type})</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Permit Type</label>
+        <select id="order-permit-type">
+          <option value="ITP">ITP – IRP Trip Permit</option>
+          <option value="MFTP">MFTP – Fuel Permit</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Origin State</label>
+        <select id="order-origin" onchange="checkBlankets()">
+          <option value="">— Select state —</option>
+          ${stateOptions()}
+        </select>
+      </div>
+      <div class="field">
+        <label>Destination State</label>
+        <select id="order-dest" onchange="checkBlankets()">
+          <option value="">— Select state —</option>
+          ${stateOptions()}
+        </select>
+      </div>
+    </div>
+    <div id="blanket-check-output"></div>
+    <div class="form-row">
+      <div class="field">
+        <label>Permit Effective Date</label>
+        <input type="date" id="order-eff-date">
+      </div>
+      <div class="field">
+        <label>VIN (auto-filled)</label>
+        <input type="text" id="order-vin" placeholder="Select driver to auto-fill" readonly style="opacity:0.7;">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Vehicle Year</label>
+        <input type="text" id="order-year" placeholder="e.g. 2016">
+      </div>
+      <div class="field">
+        <label>Unladen Weight</label>
+        <input type="text" value="80,000" readonly style="opacity:0.7;">
+      </div>
+    </div>
+    <hr class="divider">
+    <div class="section-label">Insurance &amp; USDOT</div>
+    <div id="order-insurance-fields"></div>
+    <hr class="divider">
+    <button class="btn-primary" style="width:100%;justify-content:center;font-size:14px;padding:11px;" onclick="submitOrderForm()">Add to Cart &amp; Continue</button>
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:8px;">This will queue the permit on the Georgia portal. Payment is a separate step.</div>
+  `;
+  document.getElementById('order-driver').addEventListener('change', autoFillDriver);
+}
+
+function stateOptions() {
+  const states = [['AL','Alabama'],['FL','Florida'],['GA','Georgia'],['LA','Louisiana'],['MS','Mississippi'],['NC','North Carolina'],['SC','South Carolina'],['TN','Tennessee'],['TX','Texas'],['VA','Virginia']];
+  return states.map(s=>`<option value="${s[0]}">${s[1]} (${s[0]})</option>`).join('');
+}
+
+function autoFillDriver() {
+  const id = document.getElementById('order-driver').value;
+  const d = DRIVERS.find(x=>x.id===id);
+  if(!d) {
+    document.getElementById('order-vin').value='';
+    document.getElementById('order-insurance-fields').innerHTML='';
+    return;
+  }
+  document.getElementById('order-vin').value = d.vin;
+  const isMega = d.type==='F'||d.type==='LP';
+  document.getElementById('order-insurance-fields').innerHTML = `
+    <div class="form-row">
+      <div class="field"><label>Safety USDOT</label><input type="text" value="${d.usdot}" readonly style="opacity:0.7;"></div>
+      <div class="field"><label>Operator USDOT</label><input type="text" value="${d.usdot}" readonly style="opacity:0.7;"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Insurance Company</label><input type="text" value="${isMega?'Prime Property and Casualty':'[Driver\'s own insurance]'}" ${isMega?'readonly style="opacity:0.7;"':''}></div>
+      <div class="field"><label>Policy No.</label><input type="text" value="${isMega?'PC24040671':''}" ${isMega?'readonly style="opacity:0.7;"':''}></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Insurance Effective</label><input type="date" value="${isMega?'2025-04-11':''}" ${isMega?'readonly style="opacity:0.7;"':''}></div>
+      <div class="field"><label>Insurance Expiration</label><input type="date" value="${isMega?'2026-04-11':''}" ${isMega?'readonly style="opacity:0.7;"':''}></div>
+    </div>
+    ${isMega?'<div class="check-alert order" style="margin-top:0;"><span class="alert-icon">i</span>Using Mega\'s insurance (Prime P&C · PC24040671). F/LP driver confirmed.</div>':'<div class="check-alert warn"><span class="alert-icon">⚠</span>This is an OT/BC/AC/WC driver — enter their own insurance info above.</div>'}
+  `;
+  checkBlankets();
+}
+
+function checkBlankets() {
+  const driverId = document.getElementById('order-driver')?.value;
+  const origin = document.getElementById('order-origin')?.value;
+  const dest = document.getElementById('order-dest')?.value;
+  const out = document.getElementById('blanket-check-output');
+  if(!driverId||!origin||!dest) { out.innerHTML=''; return; }
+
+  const originBlanket = BLANKETS.find(b=>b.driver===driverId&&b.state===origin);
+  const destBlanket   = BLANKETS.find(b=>b.driver===driverId&&b.state===dest);
+  let html = '';
+
+  if(originBlanket&&destBlanket) {
+    html = `<div class="check-alert skip"><span class="alert-icon">✓</span><div><strong>Both states have blanket permits on file.</strong> No permit purchase needed for this load (origin: ${origin} · dest: ${dest}).</div></div>`;
+  } else if(originBlanket) {
+    html = `<div class="check-alert skip"><span class="alert-icon">✓</span><div>Blanket permit on file for <strong>${origin}</strong> (${originBlanket.num}) — skipping origin state.</div></div>
+    <div class="check-alert order"><span class="alert-icon">→</span><div>Will order permit for <strong>${dest}</strong> only.</div></div>`;
+  } else if(destBlanket) {
+    html = `<div class="check-alert skip"><span class="alert-icon">✓</span><div>Blanket permit on file for <strong>${dest}</strong> (${destBlanket.num}) — skipping destination state.</div></div>
+    <div class="check-alert order"><span class="alert-icon">→</span><div>Will order permit for <strong>${origin}</strong> only.</div></div>`;
+  } else {
+    html = `<div class="check-alert order"><span class="alert-icon">→</span><div>No blankets on file for ${origin} or ${dest}. Will order permits for <strong>both states</strong>.</div></div>`;
+  }
+  out.innerHTML = html;
+}
+
+function submitOrderForm() {
+  const driverId = document.getElementById('order-driver')?.value;
+  const d = DRIVERS.find(x=>x.id===driverId);
+  if(!d) { showToast('⚠','Please select a driver'); return; }
+  const type = document.getElementById('order-permit-type').value;
+  const eff = document.getElementById('order-eff-date').value;
+  if(!eff) { showToast('⚠','Please set an effective date'); return; }
+  const newId = 'P'+String(PERMITS.length+1).padStart(4,'0');
+  const effFormatted = eff.replace(/(\d{4})-(\d{2})-(\d{2})/,'$2/$3/$1');
+  const expDate = new Date(eff); expDate.setDate(expDate.getDate()+7);
+  const expFormatted = expDate.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  PERMITS.push({ id:newId, driver:d.id, dname:d.name.split(' ').slice(-1)[0]+', '+d.name[0]+'.', type, state:'GA', eff:effFormatted, exp:expFormatted, vin:d.vin, status:'Pending', fee:type==='ITP'?30:25 });
+  showToast('✓','Permit added to cart · '+newId);
+  renderDashboardTable();
+  renderHistoryTable();
+  setTimeout(()=>{ openPayModal(newId, d, type, effFormatted, expFormatted); },400);
+}
+
+function openPayModal(permId, driver, type, eff, exp) {
+  const fee = type==='ITP'?30:25;
+  document.getElementById('modal-body-content').innerHTML = `
+    <div class="check-alert order"><span class="alert-icon">🛒</span>Permit ${permId} is in cart. Proceed to payment below.</div>
+    <div style="background:var(--navy3);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Order Summary</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>${type==='ITP'?'IRP Trip Permit':'MFTP Fuel Permit'}</span><span>$${fee}.00</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text3);margin-bottom:8px;"><span>Convenience fee</span><span>$1.00</span></div>
+      <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;font-weight:600;"><span>Total</span><span>$${fee+1}.00</span></div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Charged to:</div>
+    <div class="cc-card" style="margin-bottom:16px;">
+      <span class="cc-brand">VISA</span>
+      <div class="cc-details"><div class="cc-number">•••• •••• •••• ${ccInfo.last4}</div><div class="cc-name">${ccInfo.name}</div></div>
+    </div>
+    <div class="check-alert warn"><span class="alert-icon">⚠</span>Total (incl. CC fee) is charged back to the driver via DPA including the 20% markup.</div>
+    <button class="btn-primary" style="width:100%;justify-content:center;font-size:14px;padding:11px;margin-top:4px;" onclick="confirmPayment('${permId}')">Confirm &amp; Pay Now</button>
+    <button class="btn-secondary" style="width:100%;justify-content:center;margin-top:8px;" onclick="closeModal('order-modal')">Add More Permits First</button>
+  `;
+  openModal('order-modal');
+}
+
+function confirmPayment(permId) {
+  const p = PERMITS.find(x=>x.id===permId);
+  if(p) p.status='Active';
+  closeModal('order-modal');
+  showToast('✓','Payment confirmed · Permit emailed to MICHAEL@MEGATRUCKINGLLC.COM');
+  renderDashboardTable();
+  renderHistoryTable();
+}
+
+function openOrderModal() {
+  renderOrderForm();
+  document.getElementById('modal-body-content').innerHTML = document.getElementById('order-form-content').innerHTML;
+  document.getElementById('modal-body-content').innerHTML = `<p style="color:var(--text3);font-size:13px;margin-bottom:16px;">Use the Order Permits page for full form access.</p><button class="btn-primary" style="width:100%;justify-content:center;" onclick="closeModal('order-modal');showView('order')">Go to Order Form →</button>`;
+  openModal('order-modal');
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t,i)=>{ t.classList.toggle('active', (i===0&&tab==='trip')||(i===1&&tab==='fuel')); });
+  document.getElementById('order-permit-type').value = tab==='trip'?'ITP':'MFTP';
+}
+
+function viewPermit(id) {
+  const p = PERMITS.find(x=>x.id===id);
+  if(!p) return;
+  const d = DRIVERS.find(x=>x.id===p.driver);
+  const typeBadge = p.type==='ITP'?'<span class="badge badge-trip">ITP – IRP Trip Permit</span>':'<span class="badge badge-fuel">MFTP – Fuel Permit</span>';
+  const statusBadge = p.status==='Active'?'<span class="badge badge-active">Active</span>':p.status==='Pending'?'<span class="badge badge-pending">Pending</span>':'<span class="badge badge-expired">Expired</span>';
+  document.getElementById('modal-body-content').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <div style="width:44px;height:44px;border-radius:12px;background:var(--navy3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent2);">${p.dname.split(',')[0].substring(0,2).toUpperCase()}</div>
+      <div><div style="font-weight:600;font-size:15px;">${d?d.name:p.driver}</div><div style="font-size:12px;color:var(--text3);">Tractor ${d?d.tractor:'—'} · ${d?d.type:''} Driver</div></div>
+      <div style="margin-left:auto;display:flex;gap:8px;">${typeBadge}${statusBadge}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      ${[['Permit ID',p.id],['State','Georgia (GA)'],['Effective',p.eff],['Expires',p.exp],['VIN',p.vin],['Fee','$'+p.fee+'.00 + $1 CC fee']].map(([l,v])=>`<div style="background:var(--navy3);border-radius:8px;padding:10px 12px;"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">${l}</div><div style="font-size:13px;font-family:'DM Mono',monospace;">${v}</div></div>`).join('')}
+    </div>
+    <button class="btn-primary" style="width:100%;justify-content:center;" onclick="downloadPDF('${p.id}');closeModal('order-modal')">↓ Download Permit PDF</button>
+  `;
+  document.querySelector('#order-modal .modal-title').textContent='Permit '+p.id;
+  document.querySelector('#order-modal .modal-subtitle').textContent='Georgia Trucking Portal';
+  openModal('order-modal');
+}
+
+function downloadPDF(id) {
+  showToast('↓', 'Downloading permit '+id+' PDF...');
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openCCModal() {
+  document.getElementById('cc-name-input').value=ccInfo.name;
+  document.getElementById('cc-last4-input').value=ccInfo.last4;
+  document.getElementById('cc-exp-input').value=ccInfo.exp;
+  document.getElementById('cc-city-input').value=ccInfo.city;
+  document.getElementById('cc-zip-input').value=ccInfo.zip;
+  openModal('cc-modal');
+}
+
+function saveCCInfo() {
+  ccInfo.name=document.getElementById('cc-name-input').value;
+  ccInfo.last4=document.getElementById('cc-last4-input').value;
+  ccInfo.exp=document.getElementById('cc-exp-input').value;
+  ccInfo.city=document.getElementById('cc-city-input').value;
+  ccInfo.zip=document.getElementById('cc-zip-input').value;
+  closeModal('cc-modal');
+  renderCCDisplay();
+  showToast('✓','Card info updated');
+}
+
+function openAddBlanket() { openModal('blanket-modal'); }
+function saveBlanket() {
+  const driver=document.getElementById('blanket-driver').value;
+  const state=document.getElementById('blanket-state').value;
+  const num=document.getElementById('blanket-num').value;
+  const exp=document.getElementById('blanket-exp').value;
+  if(!num||!exp){ showToast('⚠','Please fill all fields'); return; }
+  const expFormatted = exp.replace(/(\d{4})-(\d{2})-(\d{2})/,'$2/$3/$1');
+  BLANKETS.push({driver,state,num,exp:expFormatted});
+  closeModal('blanket-modal');
+  renderBlanketFull();
+  renderBlanketMini();
+  showToast('✓','Blanket permit added for '+state);
+}
+
+function handleSearch(val) {
+  if(!val) return;
+}
+
+let toastTimer;
+function showToast(icon, msg) {
+  const t=document.getElementById('toast');
+  document.getElementById('toast-icon').textContent=icon;
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+document.querySelectorAll('.modal-overlay').forEach(overlay=>{
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.classList.remove('open'); });
+});
+
+initDashboard();
+</script>
+</body>
+</html>
