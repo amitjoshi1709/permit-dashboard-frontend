@@ -1,67 +1,186 @@
-# Permit Dashboard — Backend Spec
+# Mega Trucking — Backend System Prompt
 
-## Overview
-
-The dashboard frontend is complete and currently runs against mock data. The backend is an HTTP server (port `3001`) that:
-
-1. Serves driver/permit data from a database
-2. Accepts permit order requests from the dashboard
-3. Forwards those orders via HTTP to a **separate automation server** that runs the actual browser scripts against state portals
-4. Tracks permit status and stores results
-
-The frontend lives in `src/api.js`. When the backend is ready, flip `USE_MOCK` to `false` — no other frontend changes needed.
+You are building the backend API server for the Mega Trucking Permit Dashboard. This server sits between a React frontend and Playwright automation scripts that fill permit forms on state portals.
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────┐       ┌──────────────────┐       ┌──────────────────────┐
-│   Dashboard   │──────▶│   Backend API     │──────▶│  Automation Server   │
-│  (React app)  │ HTTP  │  (port 3001)      │ HTTP  │  (separate host)     │
-│               │◀──────│                   │◀──────│  runs portal scripts │
-└──────────────┘       └──────────────────┘       └──────────────────────┘
+┌──────────────┐        ┌──────────────────┐        ┌──────────────────────┐
+│   Dashboard   │───────▶│   Backend API     │───────▶│  Automation Server   │
+│  (React app)  │  HTTP  │  (port 3001)      │  HTTP  │  (Playwright scripts)│
+│  localhost:5173│◀──────│                   │◀──────│  fills portal forms  │
+└──────────────┘        └──────────────────┘        └──────────────────────┘
+                              │
+                              ▼
+                     ┌──────────────────┐
+                     │    Supabase      │
+                     │  (PostgreSQL)    │
+                     │  `fleet` table   │
+                     └──────────────────┘
 ```
 
-- **Dashboard → Backend**: REST calls defined below
-- **Backend → Automation Server**: Backend makes HTTP requests to trigger automation scripts and poll for results
-- **Automation stops before payment** — the scripts fill forms but do NOT complete checkout
+**Flow:**
+1. Dispatcher selects driver(s), state(s), permit type, and effective date on the dashboard
+2. Dashboard sends only tractor numbers + state codes + permit type + effective date to the backend
+3. Backend looks up full driver/vehicle/insurance details from Supabase `fleet` table
+4. Backend forwards the complete payload to the automation server via HTTP
+5. Playwright scripts use that payload to fill state portal forms — **automation stops before payment**
+6. Automation server reports results back; backend updates permit status
 
 ---
 
-## API Endpoints
+## Supabase Database
+
+### Table: `fleet`
+
+This is the single source of truth for all driver and vehicle data. Column names contain spaces and special characters — **always use double quotes in SQL**.
+
+```sql
+CREATE TABLE fleet (
+  id                          SERIAL PRIMARY KEY,
+  "Tractor Number"            TEXT UNIQUE NOT NULL,
+  "Driver Type"               TEXT NOT NULL,
+  "Year"                      INTEGER,
+  "Make"                      TEXT,
+  "VIN (Serial Number)"       TEXT,
+  "Tag #"                     TEXT,
+  "Tag State"                 TEXT,
+  "First Name"                TEXT NOT NULL,
+  "Last Name"                 TEXT NOT NULL,
+  "Driver Code"               TEXT,
+  "USDOT"                     TEXT,
+  "FEIN"                      TEXT,
+  "Insurance Company"         TEXT,
+  "Insurance Effective Date"  TEXT,
+  "Insurance Expiration Date" TEXT,
+  "Insurance Policy Number"   TEXT,
+  active                      BOOLEAN DEFAULT TRUE,
+  created_at                  TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Example query:**
+```sql
+SELECT "Tractor Number", "First Name", "Last Name", "Driver Type", "VIN (Serial Number)", "USDOT"
+FROM fleet
+WHERE active = true;
+```
+
+### Driver Type Logic
+
+| Type        | Category       | USDOT        | FEIN     | Insurance                          |
+|-------------|---------------|--------------|----------|------------------------------------|
+| F, LP, T    | Mega trucks   | `2582238`    | N/A      | Prime Property and Casualty, PC24040671, 04/11/2025–04/11/2026 |
+| OT, BC, AC, WC | Owner-operators | Driver's own | Driver's own | Driver's own — stored in fleet table |
+
+- **F/LP/T drivers**: USDOT is always `2582238`. Insurance is always Mega's policy. FEIN is blank.
+- **OT/BC/AC/WC drivers**: All fields come from the `fleet` table as entered by the dispatcher.
+
+---
+
+## Dashboard → Backend API Contract
+
+The dashboard frontend (`src/api.js`) makes these HTTP calls. When the real backend is ready, only the `USE_MOCK` flag needs to flip.
 
 ### `GET /api/drivers`
 
-Returns the list of drivers the dispatcher can select from. The dashboard only needs `id`, `name`, and `tractor` — do not expose sensitive fields (SSN, license, insurance, etc.).
+Returns active drivers for the dispatcher search. The dashboard displays name, tractor, and type. It also uses the full detail set for the Driver Database editor.
 
 **Response `200`**
 ```json
 [
-  { "id": "D001", "name": "Jonattan Vazquez Perez", "tractor": "F894"  },
-  { "id": "D002", "name": "Maria Gonzalez",         "tractor": "F712"  },
-  { "id": "D003", "name": "Carlos Reyes",           "tractor": "OT201" },
-  { "id": "D004", "name": "Ana Torres",             "tractor": "BC102" }
+  {
+    "id": 1,
+    "firstName": "Jonattan",
+    "lastName": "Vazquez Perez",
+    "name": "Jonattan Vazquez Perez",
+    "tractor": "F894",
+    "driverType": "F",
+    "year": 2016,
+    "make": "Freightliner",
+    "vin": "3HSDJAPRXGN030818",
+    "tagNumber": "FL-1234",
+    "tagState": "FL",
+    "usdot": "2582238",
+    "fein": "",
+    "insuranceCompany": "Prime Property and Casualty",
+    "insuranceEffective": "04/11/2025",
+    "insuranceExpiration": "04/11/2026",
+    "policyNumber": "PC24040671"
+  }
 ]
 ```
 
-Notes:
-- Source this from your driver database/table
-- The frontend searches by `name`, `tractor`, and `id` — all three must be present
-- Keep the response flat and minimal
+**Source query:**
+```sql
+SELECT * FROM fleet WHERE active = true ORDER BY "Last Name", "First Name";
+```
+
+Map column names to camelCase response fields:
+| Supabase Column               | JSON Field           |
+|-------------------------------|----------------------|
+| `id`                          | `id`                 |
+| `"First Name"`                | `firstName`          |
+| `"Last Name"`                 | `lastName`           |
+| (computed)                    | `name` = `firstName + " " + lastName` |
+| `"Tractor Number"`           | `tractor`            |
+| `"Driver Type"`              | `driverType`         |
+| `"Year"`                     | `year`               |
+| `"Make"`                     | `make`               |
+| `"VIN (Serial Number)"`      | `vin`                |
+| `"Tag #"`                    | `tagNumber`          |
+| `"Tag State"`                | `tagState`           |
+| `"USDOT"`                    | `usdot`              |
+| `"FEIN"`                     | `fein`               |
+| `"Insurance Company"`        | `insuranceCompany`   |
+| `"Insurance Effective Date"` | `insuranceEffective` |
+| `"Insurance Expiration Date"`| `insuranceExpiration` |
+| `"Insurance Policy Number"`  | `policyNumber`       |
+
+---
+
+### `POST /api/drivers`
+
+Creates a new driver in the `fleet` table. Called from the Driver Database editor.
+
+**Request body** — same shape as the driver object above (without `id`, `name`).
+
+**Response `200`** — the created driver with `id` assigned.
+
+---
+
+### `PUT /api/drivers/:id`
+
+Updates an existing driver. Accepts a partial object with only the fields being changed.
+
+**Response `200`** — the updated driver object.
+
+---
+
+### `DELETE /api/drivers/:id`
+
+Soft-deletes a driver by setting `active = false`. Do NOT hard-delete — permit history references these drivers.
+
+**Response `200`**
+```json
+{ "success": true }
+```
 
 ---
 
 ### `POST /api/permits/order`
 
-The dashboard sends **only** driver IDs and state codes. The backend resolves everything else (VIN, USDOT, insurance, weight, carrier info, etc.) from its own database before forwarding to the automation server.
+The dashboard sends the minimal info needed. The backend resolves everything else from Supabase.
 
 **Request body**
 ```json
 {
-  "driverIds":  ["D001", "D003"],
-  "states":     ["GA"],
-  "permitType": "trip_fuel"
+  "driverIds":     [1, 3],
+  "states":        ["GA"],
+  "permitType":    "trip_fuel",
+  "effectiveDate": "2026-03-24"
 }
 ```
 
@@ -73,15 +192,19 @@ The dashboard sends **only** driver IDs and state codes. The backend resolves ev
 | `trip`       | Trip          |
 | `fuel`       | Fuel          |
 
+**`effectiveDate`**: ISO date string (`YYYY-MM-DD`). Defaults to today on the frontend.
+
 **What the backend must do:**
 
-1. Validate `driverIds` exist in the database
-2. Validate `states` are supported and live
+1. Validate `driverIds` exist in `fleet` and are `active = true`
+2. Validate `states` are in the supported list
 3. Validate `permitType` is one of the allowed values
-3. For each driver × state combination, look up all required permit form fields from the database
-4. Send an HTTP request to the automation server with the full payload (see Automation Server section below)
-5. Create a job record and individual permit records in `pending` status
-6. Return immediately — do not wait for automation to finish
+4. For each driver × state combination:
+   - Query the full driver record from `fleet`
+   - Build the automation payload (see below)
+5. Send HTTP request to the automation server with the enriched payload
+6. Create permit records in `Pending` status
+7. Return immediately — do not wait for automation
 
 **Response `200`**
 ```json
@@ -94,21 +217,17 @@ The dashboard sends **only** driver IDs and state codes. The backend resolves ev
 
 **Error responses**
 ```json
-// 400 — bad request
-{ "error": "No valid driver IDs provided" }
-
-// 400 — unsupported state
-{ "error": "State XX is not currently supported" }
-
-// 500 — internal
-{ "error": "Failed to queue permits" }
+{ "error": "No valid driver IDs provided" }        // 400
+{ "error": "State XX is not currently supported" }  // 400
+{ "error": "Invalid permit type" }                  // 400
+{ "error": "Failed to queue permits" }              // 500
 ```
 
 ---
 
 ### `GET /api/permits/history`
 
-Returns all permit records for the history table. The frontend expects this exact shape.
+Returns all permit records for the history table.
 
 **Response `200`**
 ```json
@@ -127,37 +246,33 @@ Returns all permit records for the history table. The frontend expects this exac
 ]
 ```
 
-**Field details:**
-
 | Field        | Type   | Values / Format                            |
 |------------- |--------|--------------------------------------------|
 | `id`         | string | Unique permit ID (e.g. `P0046`)            |
-| `driverName` | string | Display name, `"Last, F."` format          |
+| `driverName` | string | `"Last, F."` format                        |
 | `tractor`    | string | Tractor/unit number                        |
-| `state`      | string | Two-letter state code (`GA`, `FL`, etc.)   |
+| `state`      | string | Two-letter state code                      |
 | `type`       | string | `"ITP"` or `"MFTP"`                        |
 | `status`     | string | `"Active"`, `"Expired"`, or `"Pending"`    |
-| `effDate`    | string | Effective date `MM/DD/YYYY`                |
-| `expDate`    | string | Expiration date `MM/DD/YYYY`               |
+| `effDate`    | string | `MM/DD/YYYY`                               |
+| `expDate`    | string | `MM/DD/YYYY`                               |
 | `fee`        | number | Dollar amount, `0` if pending              |
 
-Notes:
 - Return newest first (descending by effective date)
-- The frontend filters by `status` and `type` client-side, so return all records
-- Consider pagination later if the table grows large
+- Frontend filters by `status` and `type` client-side
 
 ---
 
 ### `GET /api/permits/blankets`
 
-Returns all blanket permits on file. Used by the dashboard and blanket permits view.
+Returns blanket permits on file.
 
 **Response `200`**
 ```json
 [
   {
     "id": "BL001",
-    "driverId": "D001",
+    "driverId": 1,
     "driverName": "Jonattan Vazquez Perez",
     "state": "FL",
     "num": "BP-FL-2026-001",
@@ -166,45 +281,65 @@ Returns all blanket permits on file. Used by the dashboard and blanket permits v
 ]
 ```
 
-| Field        | Type   | Description                              |
-|------------- |--------|------------------------------------------|
-| `id`         | string | Unique blanket permit ID                 |
-| `driverId`   | string | References a driver                      |
-| `driverName` | string | Full driver name for display             |
-| `state`      | string | Two-letter state code                    |
-| `num`        | string | Blanket permit number                    |
-| `exp`        | string | Expiration date `MM/DD/YYYY`             |
+---
+
+### `POST /api/permits/callback`
+
+Receives results from the automation server after a Playwright script completes.
+
+**Request body**
+```json
+{
+  "permitId": "P0051",
+  "jobId": "JOB-1234",
+  "status": "Active",
+  "fee": 30.00,
+  "type": "ITP",
+  "portalConfirmation": "...",
+  "pdfUrl": "..."
+}
+```
+
+**Backend action:**
+1. Update the permit record: `Pending` → `Active` or `Expired` (if failed)
+2. Store fee, type, confirmation number, PDF URL
 
 ---
 
-## Automation Server Integration
+## Automation Server Payload
 
-The automation server is a **separate service** that runs browser automation scripts against state permit portals. The backend communicates with it over HTTP.
+When the backend receives `POST /api/permits/order`, it builds this payload from the `fleet` table and sends it to the automation server. This is what the Playwright scripts use to fill portal forms.
 
-### Triggering automation
-
-When the backend receives a `POST /api/permits/order`, it should forward the full permit data to the automation server:
-
-```
+```json
 POST {AUTOMATION_SERVER_URL}/run
-Content-Type: application/json
 
 {
   "jobId": "JOB-1234",
   "permits": [
     {
-      "permitId": "P-1515487",
+      "permitId": "P0051",
       "state": "GA",
+      "permitType": "trip_fuel",
+      "effectiveDate": "2026-03-24",
       "driver": {
-        "id": "D001",
-        "name": "Jonattan Vazquez Perez",
+        "firstName": "Jonattan",
+        "lastName": "Vazquez Perez",
+        "driverType": "F",
+        "driverCode": "JVAZQUE",
         "tractor": "F894",
-        "vin": "...",
-        "usdot": "...",
-        "insurance": { ... },
-        "weight": ...,
-        "driverType": "...",
-        "carrier": { ... }
+        "year": 2016,
+        "make": "Freightliner",
+        "vin": "3HSDJAPRXGN030818",
+        "tagNumber": "FL-1234",
+        "tagState": "FL",
+        "usdot": "2582238",
+        "fein": "",
+        "insurance": {
+          "company": "Prime Property and Casualty",
+          "effectiveDate": "04/11/2025",
+          "expirationDate": "04/11/2026",
+          "policyNumber": "PC24040671"
+        }
       }
     }
   ],
@@ -212,106 +347,67 @@ Content-Type: application/json
 }
 ```
 
-Key points:
-- The backend enriches the payload with all permit form fields from its database — the dashboard never has this data
-- Include a `callbackUrl` so the automation server can notify the backend when each permit completes
-- Each permit in the array is one driver × state combination
-
-### Receiving results (callback)
-
-The automation server should call back to the backend when a permit finishes (success or failure):
-
-```
-POST {BACKEND_URL}/api/permits/callback
-Content-Type: application/json
-
-{
-  "permitId": "P-1515487",
-  "jobId": "JOB-1234",
-  "status": "issued",
-  "fee": 31.00,
-  "type": "ITP",
-  "portalConfirmation": "...",
-  "pdfUrl": "..."
-}
-```
-
-On receiving this callback, the backend should:
-1. Update the permit record status (`pending` → `issued` or `failed`)
-2. Store the fee, type, and any portal confirmation details
-3. Store the PDF URL if the automation captured the permit document
-
-### Alternative: Polling
-
-If callbacks aren't feasible, the backend can poll the automation server:
-
-```
-GET {AUTOMATION_SERVER_URL}/status/{jobId}
-```
-
-Response:
-```json
-{
-  "jobId": "JOB-1234",
-  "permits": [
-    { "permitId": "P-1515487", "status": "issued", "fee": 31.00, "type": "ITP" },
-    { "permitId": "P-1515488", "status": "pending" }
-  ]
-}
-```
-
-Poll on an interval (e.g., every 10–15 seconds) until all permits are no longer `pending`.
+**Key points:**
+- Every field the Playwright script needs is in this payload — the script should not need to query any database
+- `effectiveDate` comes from the dashboard (user-selected, defaults to today)
+- All other fields come from the `fleet` table in Supabase
+- `driverCode` is the `"Driver Code"` column — used by some portals as an identifier
+- The `insurance` object is nested for clarity
+- Include `callbackUrl` so the automation server can POST results back
 
 ---
 
-## Data Ownership Boundary
+## Supported States
 
-This is critical — the dashboard and backend have a clear data boundary:
+All states are selectable on the dashboard (no "coming soon" restrictions). The backend should accept any of these:
 
-| Data                              | Who owns it          |
-|-----------------------------------|----------------------|
-| Driver IDs, state codes           | Dashboard sends these |
-| VIN, USDOT, insurance, weight, carrier info, driver type | Backend database only |
-| Permit form field mapping per state | Backend / automation  |
-| Permit results (status, fee, PDF) | Backend stores from automation |
-
-The dashboard **never** sees, stores, or transmits sensitive permit form data. It only sends driver IDs and state codes. The backend resolves everything else.
+```
+GA, FL, SC, NC, TN, AL, MS, LA, TX
+```
 
 ---
 
 ## CORS
 
-The frontend runs on `localhost:5173` (Vite dev server) and calls `localhost:3001`. The backend must set CORS headers:
+The frontend runs on `localhost:5173` (Vite dev). The backend must set:
 
 ```
 Access-Control-Allow-Origin: http://localhost:5173
-Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
 Access-Control-Allow-Headers: Content-Type
 ```
 
-In production, restrict the origin to the actual dashboard domain.
+Restrict the origin to the production domain in deployment.
 
 ---
 
-## Environment Variables (suggested)
+## Environment Variables
 
 ```
 PORT=3001
-DATABASE_URL=...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
 AUTOMATION_SERVER_URL=http://automation-host:PORT
 CALLBACK_BASE_URL=http://backend-host:3001
 ```
+
+Use the Supabase JS client (`@supabase/supabase-js`) with the service role key for backend access. Never expose the service key to the frontend.
 
 ---
 
 ## Checklist
 
-- [ ] `GET /api/drivers` — returns driver list (id, name, tractor only)
-- [ ] `POST /api/permits/order` — validates input (including `permitType`), enriches from DB, forwards to automation server, returns job ID
-- [ ] `GET /api/permits/history` — returns all permits with `effDate`/`expDate` and status `Active`/`Expired`/`Pending`
-- [ ] `GET /api/permits/blankets` — returns blanket permits on file
-- [ ] `POST /api/permits/callback` — receives automation results, updates permit records
+- [ ] `GET /api/drivers` — query `fleet` where `active = true`, map columns to camelCase
+- [ ] `POST /api/drivers` — insert into `fleet`, return created record
+- [ ] `PUT /api/drivers/:id` — update `fleet` row
+- [ ] `DELETE /api/drivers/:id` — set `active = false` (soft delete)
+- [ ] `POST /api/permits/order` — validate input, query `fleet` for full details, build automation payload, forward to automation server
+- [ ] `GET /api/permits/history` — return permits with `effDate`/`expDate`, status `Active`/`Expired`/`Pending`
+- [ ] `GET /api/permits/blankets` — return blanket permits
+- [ ] `POST /api/permits/callback` — receive automation results, update permit records
 - [ ] CORS configured for dashboard origin
-- [ ] Automation payloads include all form fields the portal scripts need
-- [ ] Permit records created in `Pending` status on order, updated on callback
-- [ ] Sensitive data (VIN, USDOT, insurance) never sent to the dashboard
+- [ ] Supabase client initialized with service role key
+- [ ] Column name mapping handles double-quoted Supabase columns
+- [ ] Soft delete only — never hard-delete drivers
+- [ ] Automation payload includes every field Playwright scripts need
+- [ ] Permit records created in `Pending` status, updated on callback

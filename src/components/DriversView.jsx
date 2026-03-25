@@ -203,10 +203,16 @@ export default function DriversView({ onToast }) {
 
   function load() {
     setLoading(true);
-    fetchDrivers().then((data) => {
-      setDrivers(data);
-      setLoading(false);
-    });
+    fetchDrivers()
+      .then((data) => {
+        setDrivers(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setDrivers([]);
+        setLoading(false);
+        onToast?.("⚠", "Failed to load drivers");
+      });
   }
 
   useEffect(() => { load(); }, []);
