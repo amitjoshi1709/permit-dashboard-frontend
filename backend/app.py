@@ -1,0 +1,168 @@
+import uuid
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from models import (
+    PermitOrderRequest,
+    PermitOrderResponse,
+    DriverCreateRequest,
+    DriverUpdateRequest,
+    ErrorResponse,
+)
+from database import (
+    get_active_drivers,
+    get_drivers_by_ids,
+    create_driver_record,
+    update_driver_record,
+    soft_delete_driver,
+)
+from tasks import run_permit_job, get_job_status, signal_captcha_solved
+from config import SUPPORTED_STATES, VALID_PERMIT_TYPES, COMPANY_TYPES, COMPANY_DRIVER_DEFAULTS
+
+app = FastAPI(title="Mega Trucking Permit API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
+
+
+# ── Drivers ──────────────────────────────────────────────────────────
+
+@app.get("/api/drivers")
+def list_drivers():
+    return get_active_drivers()
+
+
+@app.post("/api/drivers")
+def create_driver(body: DriverCreateRequest):
+    return create_driver_record(body.model_dump(exclude_none=True))
+
+
+@app.put("/api/drivers/{driver_id}")
+def update_driver(driver_id: int, body: DriverUpdateRequest):
+    data = body.model_dump(exclude_none=True)
+    if not data:
+        raise HTTPException(400, "No fields to update")
+    return update_driver_record(driver_id, data)
+
+
+@app.delete("/api/drivers/{driver_id}")
+def delete_driver(driver_id: int):
+    ok = soft_delete_driver(driver_id)
+    if not ok:
+        raise HTTPException(404, "Driver not found")
+    return {"success": True}
+
+
+# ── Permit Ordering ──────────────────────────────────────────────────
+
+@app.post("/api/permits/order")
+def order_permits(body: PermitOrderRequest):
+    # Validate states
+    for s in body.states:
+        if s not in SUPPORTED_STATES:
+            raise HTTPException(400, f"State {s} is not currently supported")
+
+    # Validate permit type
+    if body.permitType not in VALID_PERMIT_TYPES:
+        raise HTTPException(400, "Invalid permit type")
+
+    # Fetch driver records
+    drivers = get_drivers_by_ids(body.driverIds)
+    if not drivers:
+        raise HTTPException(400, "No valid driver IDs provided")
+
+    # Build automation permits list (driver × state combinations)
+    job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
+    permits = []
+    permit_counter = 1
+
+    for driver in drivers:
+        for state in body.states:
+            # Build insurance object
+            if driver.get("driverType") in COMPANY_TYPES:
+                insurance = {
+                    "company": COMPANY_DRIVER_DEFAULTS["insurance_company"],
+                    "effectiveDate": COMPANY_DRIVER_DEFAULTS["insurance_effective"],
+                    "expirationDate": COMPANY_DRIVER_DEFAULTS["insurance_expiration"],
+                    "policyNumber": COMPANY_DRIVER_DEFAULTS["policy_number"],
+                }
+                usdot = COMPANY_DRIVER_DEFAULTS["usdot"]
+            else:
+                insurance = {
+                    "company": driver.get("insuranceCompany", ""),
+                    "effectiveDate": driver.get("insuranceEffective", ""),
+                    "expirationDate": driver.get("insuranceExpiration", ""),
+                    "policyNumber": driver.get("policyNumber", ""),
+                }
+                usdot = driver.get("usdot", "")
+
+            permit_data = {
+                "permitId": f"P{str(permit_counter).zfill(4)}",
+                "state": state,
+                "permitType": body.permitType,
+                "effectiveDate": body.effectiveDate,
+                "driver": {
+                    "firstName": driver["firstName"],
+                    "lastName": driver["lastName"],
+                    "driverType": driver.get("driverType", ""),
+                    "driverCode": driver.get("driverCode", ""),
+                    "tractor": driver["tractor"],
+                    "year": driver.get("year"),
+                    "make": driver.get("make", ""),
+                    "vin": driver.get("vin", ""),
+                    "tagNumber": driver.get("tagNumber", ""),
+                    "tagState": driver.get("tagState", ""),
+                    "usdot": usdot,
+                    "fein": driver.get("fein", ""),
+                    "insurance": insurance,
+                },
+            }
+            permits.append(permit_data)
+            permit_counter += 1
+
+    # Fire Celery background task
+    run_permit_job.delay(job_id, permits)
+
+    return PermitOrderResponse(
+        jobId=job_id,
+        queued=len(permits),
+        message="Permits queued. Automation will stop before payment.",
+    )
+
+
+# ── Job Status Polling ───────────────────────────────────────────────
+
+@app.get("/api/permits/status/{job_id}")
+def poll_job_status(job_id: str):
+    status = get_job_status(job_id)
+    if status is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    return status
+
+
+# ── CAPTCHA Signal ───────────────────────────────────────────────────
+
+@app.post("/api/orders/{job_id}/captcha-solved")
+def captcha_solved(job_id: str, permit_id: str = ""):
+    signal_captcha_solved(job_id, permit_id)
+    return {"success": True}
+
+
+# ── Permit History & Blankets ────────────────────────────────────────
+# TODO: These will query a permits table once it exists.
+# For now, return empty arrays so the frontend doesn't break.
+
+@app.get("/api/permits/history")
+def permit_history():
+    # TODO: Query permit_orders table from Supabase
+    return []
+
+
+@app.get("/api/permits/blankets")
+def blanket_permits():
+    # TODO: Query blanket_permits table from Supabase
+    return []
