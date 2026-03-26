@@ -1,4 +1,4 @@
-const API_BASE = "";
+const API_BASE = "http://127.0.0.1:8000"; // always the backend url, change here when uploading to production only.
 
 // ── Supported states ──────────────────────────────────────────────────
 export const STATES = [
