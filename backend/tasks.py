@@ -13,6 +13,7 @@ import os
 import redis
 from celery_app import celery
 from dotenv import load_dotenv
+from database import update_permit_status
 
 load_dotenv()
 
@@ -23,11 +24,11 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 
 from config import COMPANY
 from scripts.alabama.runner import run as run_alabama
-# from scripts.georgia.runner import run as run_georgia
+from scripts.georgia.runner import run as run_georgia
 
 SCRIPT_REGISTRY = {
     "AL": run_alabama,
-    # "GA": run_georgia,
+    "GA": run_georgia,
     # "FL": run_florida,
     # "TX": run_texas,
     # ...add new states here
@@ -150,6 +151,10 @@ def run_permit_job(self, job_id: str, permits: list):
             captcha_cb = _make_captcha_callback(job_id, permit["permitId"], results)
             result = runner(permit, job_id, on_captcha_needed=captcha_cb, company=COMPANY)
             results.append(result)
+
+            # Update Supabase: success → "Active" (reached payment page), error → "failed"
+            db_status = "Active" if result["status"] == "success" else "failed"
+            update_permit_status(permit["permitId"], db_status)
         except Exception as e:
             results.append({
                 "permitId": permit["permitId"],
@@ -159,6 +164,7 @@ def run_permit_job(self, job_id: str, permits: list):
                 "status": "error",
                 "message": str(e),
             })
+            update_permit_status(permit["permitId"], "failed")
 
         set_job_status(job_id, "processing", results)
 

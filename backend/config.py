@@ -33,3 +33,7 @@ COMPANY_TYPES = {"F", "LP", "T"}
 
 SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX"}
 VALID_PERMIT_TYPES = {"trip_fuel", "os_ow", "trip", "fuel"}
+
+# Georgia portal config
+# Credentials come from env vars: GA_PORTAL_USERNAME, GA_PORTAL_PASSWORD
+GA_ACCOUNT_NO = "82761"

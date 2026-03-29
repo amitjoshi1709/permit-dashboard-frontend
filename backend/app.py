@@ -15,6 +15,10 @@ from database import (
     create_driver_record,
     update_driver_record,
     soft_delete_driver,
+    generate_permit_id,
+    insert_permits,
+    update_permit_status,
+    get_permit_history,
 )
 from tasks import run_permit_job, get_job_status, signal_captcha_solved
 from config import SUPPORTED_STATES, VALID_PERMIT_TYPES, COMPANY_TYPES, COMPANY_DRIVER_DEFAULTS
@@ -78,10 +82,13 @@ def order_permits(body: PermitOrderRequest):
     # Build automation permits list (driver × state combinations)
     job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
     permits = []
-    permit_counter = 1
+    permit_rows = []
 
     for driver in drivers:
         for state in body.states:
+            permit_id = generate_permit_id()
+            driver_name = f"{driver['lastName']}, {driver['firstName']}"
+
             # Build insurance object
             if driver.get("driverType") in COMPANY_TYPES:
                 insurance = {
@@ -100,8 +107,22 @@ def order_permits(body: PermitOrderRequest):
                 }
                 usdot = driver.get("usdot", "")
 
+            # Supabase row — inserted as Pending before automation runs
+            permit_rows.append({
+                "id": permit_id,
+                "job_id": job_id,
+                "driver_id": driver["id"],
+                "driver_name": driver_name,
+                "tractor": driver["tractor"],
+                "state": state,
+                "permit_type": body.permitType,
+                "status": "Pending",
+                "eff_date": body.effectiveDate,
+                "fee": 0,
+            })
+
             permit_data = {
-                "permitId": f"P{str(permit_counter).zfill(4)}",
+                "permitId": permit_id,
                 "state": state,
                 "permitType": body.permitType,
                 "effectiveDate": body.effectiveDate,
@@ -122,7 +143,9 @@ def order_permits(body: PermitOrderRequest):
                 },
             }
             permits.append(permit_data)
-            permit_counter += 1
+
+    # Insert permits into Supabase as Pending
+    insert_permits(permit_rows)
 
     # Fire Celery background task
     run_permit_job.delay(job_id, permits)
@@ -158,8 +181,7 @@ def captcha_solved(job_id: str, permit_id: str = ""):
 
 @app.get("/api/permits/history")
 def permit_history():
-    # TODO: Query permit_orders table from Supabase
-    return []
+    return get_permit_history()
 
 
 @app.get("/api/permits/blankets")

@@ -116,3 +116,61 @@ def soft_delete_driver(driver_id: int) -> bool:
         .execute()
     )
     return len(result.data) > 0
+
+
+# ── Permit functions ─────────────────────────────────────────────────
+
+def generate_permit_id() -> str:
+    """Generate the next permit ID in P0001 format (matches old Node backend)."""
+    result = (
+        supabase.table("permits")
+        .select("id")
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    next_num = 1
+    if result.data:
+        last_id = result.data[0]["id"]
+        last_num = int(last_id.replace("P", ""))
+        next_num = last_num + 1
+    return f"P{str(next_num).zfill(4)}"
+
+
+def insert_permits(rows: list[dict]):
+    """Insert permit rows into the permits table."""
+    if not rows:
+        return
+    supabase.table("permits").insert(rows).execute()
+
+
+def update_permit_status(permit_id: str, status: str, fee: float = None):
+    """Update a permit's status (and optionally fee) after automation runs."""
+    update_data = {"status": status}
+    if fee is not None:
+        update_data["fee"] = fee
+    supabase.table("permits").update(update_data).eq("id", permit_id).execute()
+
+
+def get_permit_history() -> list[dict]:
+    """Fetch all permits ordered by most recent first."""
+    result = (
+        supabase.table("permits")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [
+        {
+            "id": p["id"],
+            "driverName": p.get("driver_name", ""),
+            "tractor": p.get("tractor", ""),
+            "state": p.get("state", ""),
+            "type": p.get("type") or p.get("permit_type", ""),
+            "status": p.get("status", ""),
+            "effDate": p.get("eff_date", ""),
+            "expDate": p.get("exp_date", ""),
+            "fee": p.get("fee", 0),
+        }
+        for p in result.data
+    ]
