@@ -17,6 +17,7 @@ COLUMN_MAP = {
     "Driver Type": "driverType",
     "Year": "year",
     "Make": "make",
+    "model": "model",
     "VIN (Serial Number)": "vin",
     "Tag #": "tagNumber",
     "Tag State": "tagState",
@@ -120,8 +121,8 @@ def soft_delete_driver(driver_id: int) -> bool:
 
 # ── Permit functions ─────────────────────────────────────────────────
 
-def generate_permit_id() -> str:
-    """Generate the next permit ID in P0001 format (matches old Node backend)."""
+def generate_permit_ids(count: int) -> list[str]:
+    """Generate `count` sequential permit IDs in P0001 format."""
     result = (
         supabase.table("permits")
         .select("id")
@@ -134,7 +135,7 @@ def generate_permit_id() -> str:
         last_id = result.data[0]["id"]
         last_num = int(last_id.replace("P", ""))
         next_num = last_num + 1
-    return f"P{str(next_num).zfill(4)}"
+    return [f"P{str(next_num + i).zfill(4)}" for i in range(count)]
 
 
 def insert_permits(rows: list[dict]):

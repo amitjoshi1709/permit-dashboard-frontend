@@ -11,6 +11,7 @@ export const STATES = [
   { code: "MS", label: "Mississippi" },
   { code: "LA", label: "Louisiana" },
   { code: "TX", label: "Texas" },
+  { code: "AR", label: "Arkansas" },
 ];
 
 // ── Permit types ──────────────────────────────────────────────────────

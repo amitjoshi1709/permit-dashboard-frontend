@@ -15,7 +15,7 @@ from database import (
     create_driver_record,
     update_driver_record,
     soft_delete_driver,
-    generate_permit_id,
+    generate_permit_ids,
     insert_permits,
     update_permit_status,
     get_permit_history,
@@ -84,9 +84,15 @@ def order_permits(body: PermitOrderRequest):
     permits = []
     permit_rows = []
 
+    # Pre-generate all permit IDs in one query to avoid duplicates
+    total_permits = len(drivers) * len(body.states)
+    permit_ids = generate_permit_ids(total_permits)
+    id_index = 0
+
     for driver in drivers:
         for state in body.states:
-            permit_id = generate_permit_id()
+            permit_id = permit_ids[id_index]
+            id_index += 1
             driver_name = f"{driver['lastName']}, {driver['firstName']}"
 
             # Build insurance object
@@ -134,6 +140,7 @@ def order_permits(body: PermitOrderRequest):
                     "tractor": driver["tractor"],
                     "year": driver.get("year"),
                     "make": driver.get("make", ""),
+                    "model": driver.get("model", ""),
                     "vin": driver.get("vin", ""),
                     "tagNumber": driver.get("tagNumber", ""),
                     "tagState": driver.get("tagState", ""),

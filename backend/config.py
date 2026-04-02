@@ -31,7 +31,7 @@ COMPANY_DRIVER_DEFAULTS = {
 
 COMPANY_TYPES = {"F", "LP", "T"}
 
-SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX"}
+SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX", "AR"}
 VALID_PERMIT_TYPES = {"trip_fuel", "os_ow", "trip", "fuel"}
 
 # Georgia portal config
