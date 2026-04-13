@@ -49,17 +49,25 @@ export async function fetchDrivers() {
   return res.json();
 }
 
-export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate }) {
+export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate, effectiveTime }) {
   const res = await fetch(`${API_BASE}/api/permits/order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ driverIds, states, permitType, effectiveDate }),
+    body: JSON.stringify({ driverIds, states, permitType, effectiveDate, effectiveTime }),
   });
   return res.json();
 }
 
 export async function fetchJobStatus(jobId) {
   const res = await fetch(`${API_BASE}/api/permits/status/${jobId}`);
+  return res.json();
+}
+
+export async function signalCaptchaSolved(jobId) {
+  const res = await fetch(`${API_BASE}/api/orders/${jobId}/captcha-solved`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
   return res.json();
 }
 

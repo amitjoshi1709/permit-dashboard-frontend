@@ -12,6 +12,7 @@ Data flow:
   → Stops before payment
 """
 
+import os
 import time
 from typing import Callable, Optional
 
@@ -228,66 +229,110 @@ def is_payment_page(page: Page) -> bool:
     )
 
 
-def search_lookup_field(page: Page, field_label: str, search_term: str) -> None:
+def _wait_for_busy_overlay(page: Page, timeout: int = 15_000) -> None:
+    """Wait for the FastBusyOverlay to disappear before interacting with the page."""
     try:
-        field = page.get_by_label(field_label, exact=False)
-        btn = field.locator("xpath=ancestor::tr//button[contains(@class,'DocControlFileButton')]")
-        if btn.count() == 0:
-            btn = page.locator("button.DocControlFileButton").first
+        page.wait_for_selector("#FastBusyOverlay", state="hidden", timeout=timeout)
+    except PlaywrightTimeoutError:
+        # Overlay still visible; give it one more brief wait
+        time.sleep(1.0)
 
-        btn.click()
-        print(f"  [lookup] Clicked search button for '{field_label}'")
 
+def search_lookup_field(page: Page, field_label: str, search_term: str) -> None:
+    """
+    Perform a lookup search in Alabama TAP's modal field picker.
+    Raises an exception on failure so the caller can stop the automation
+    (instead of silently moving on and entering wrong data into the next field).
+    """
+    field = page.get_by_label(field_label, exact=False)
+    btn = field.locator("xpath=ancestor::tr//button[contains(@class,'DocControlFileButton')]")
+    if btn.count() == 0:
+        btn = page.locator("button.DocControlFileButton").first
+
+    # Wait for any existing busy overlay before clicking
+    _wait_for_busy_overlay(page)
+    btn.click()
+    print(f"  [lookup] Clicked search button for '{field_label}'")
+
+    # Wait for the modal Search button to appear
+    try:
+        page.wait_for_selector("button:has-text('Search'):visible", timeout=8_000)
+    except PlaywrightTimeoutError:
+        raise Exception(f"Search modal did not appear for '{field_label}'")
+
+    # Wait for the modal to fully render (busy overlay gone)
+    _wait_for_busy_overlay(page)
+
+    # Fill the search input
+    all_visible = page.locator("input[type='text']:visible").all()
+    if not all_visible:
+        raise Exception(f"No visible text inputs found in search overlay for '{field_label}'")
+
+    search_input = all_visible[-1]
+    search_input.fill(search_term)
+    print(f"  [lookup] Entered search term {search_term!r}")
+
+    # Wait for busy overlay to clear before clicking Search
+    _wait_for_busy_overlay(page)
+
+    # Click the Search button — retry if the overlay intercepts
+    search_btn = page.locator("button:has-text('Search'):visible").last
+    for attempt in range(3):
         try:
-            page.wait_for_selector("button:has-text('Search'):visible", timeout=8_000)
-        except PlaywrightTimeoutError:
-            iframes = page.locator("iframe:visible").all()
-            for iframe in iframes:
-                frame = iframe.content_frame()
-                if frame:
-                    try:
-                        frame.wait_for_selector("button:has-text('Search')", timeout=3_000)
-                        frame.get_by_role("textbox").first.fill(search_term)
-                        frame.locator("button:has-text('Search')").first.click()
-                        time.sleep(2.0)
-                        frame.locator(f"text={search_term}").first.click()
-                        _wait_for_page_settle(page)
-                        print(f"  [lookup] '{field_label}' = {search_term!r} (iframe)")
-                        return
-                    except Exception:
-                        continue
-            raise Exception("Search overlay / iframe did not appear after button click")
+            search_btn.click(timeout=10_000)
+            break
+        except Exception as e:
+            print(f"  [lookup] Search click attempt {attempt + 1} failed: {e}")
+            _wait_for_busy_overlay(page)
+            time.sleep(1.0)
+    else:
+        raise Exception(f"Could not click Search button for '{field_label}' after 3 attempts")
 
-        all_visible = page.locator("input[type='text']:visible").all()
-        if not all_visible:
-            raise Exception("No visible text inputs found in search overlay")
+    # Wait for results to load
+    _wait_for_busy_overlay(page)
+    time.sleep(1.5)
 
-        search_input = all_visible[-1]
-        search_input.fill(search_term)
-        print(f"  [lookup] Entered search term {search_term!r}")
+    # Click the matching result
+    try:
+        result = page.locator(f"text={search_term}").first
+        result.wait_for(state="visible", timeout=8_000)
+        result.click()
+    except Exception:
+        raise Exception(f"Search result '{search_term}' did not appear for '{field_label}'")
 
-        page.locator("button:has-text('Search'):visible").last.click()
-        time.sleep(2.0)
-
-        page.locator(f"text={search_term}").first.click()
-        _wait_for_page_settle(page)
-        print(f"  [lookup] '{field_label}' = {search_term!r}")
-
-    except Exception as e:
-        print(f"  [WARN]   Lookup search failed for '{field_label}': {e}")
+    _wait_for_page_settle(page)
+    _wait_for_busy_overlay(page)
+    print(f"  [lookup] '{field_label}' = {search_term!r}")
 
 
 # ---------------------------------------------------------------------------
 # Page steps (unchanged from original)
 # ---------------------------------------------------------------------------
 
+def _random_delay(low: float = 0.5, high: float = 1.5) -> None:
+    """Human-like random delay."""
+    import random
+    time.sleep(random.uniform(low, high))
+
+
 def step_navigate(page: Page) -> None:
+    import random
     print("\n[STEP 1] Navigating to Alabama DMV TAP portal...")
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
     print(f"  Loaded: {page.url}")
 
+    # Simulate a human reading the page before doing anything
+    _random_delay(2.0, 4.0)
+
+    # Scroll around slightly like a human would
+    page.mouse.move(random.randint(200, 600), random.randint(200, 400))
+    _random_delay(0.5, 1.5)
+    page.evaluate("window.scrollBy(0, %d)" % random.randint(50, 150))
+    _random_delay(1.0, 2.0)
+
 
 def step_click_permit_link(page: Page) -> None:
+    import random
     print("\n[STEP 2] Clicking 'Request Trip or Fuel Permit'...")
     selectors = [
         "text=Request Trip or Fuel Permit",
@@ -298,8 +343,18 @@ def step_click_permit_link(page: Page) -> None:
     for sel in selectors:
         try:
             page.wait_for_selector(sel, timeout=5_000)
-            page.click(sel)
+            # Move mouse to the link first, pause, then click
+            el = page.locator(sel).first
+            box = el.bounding_box()
+            if box:
+                page.mouse.move(
+                    box["x"] + random.randint(5, int(box["width"]) - 5),
+                    box["y"] + random.randint(2, int(box["height"]) - 2),
+                )
+                _random_delay(0.5, 1.2)
+            el.click()
             _wait_for_page_settle(page)
+            _random_delay(1.5, 3.0)
             print(f"  Clicked: {sel!r}")
             return
         except PlaywrightTimeoutError:
@@ -312,20 +367,97 @@ def step_click_permit_link(page: Page) -> None:
             print(f"    {text!r}")
 
 
-def step_captcha(page: Page, on_captcha_needed: Optional[Callable] = None) -> None:
-    print("\n[STEP 3] About / intro page — CAPTCHA required.")
-    debug_fields(page)
+def _solve_captcha_with_capsolver(page: Page) -> bool:
+    """
+    Solve reCAPTCHA v2 using CapSolver API.
+    Extracts the site key from the page, sends it to CapSolver,
+    and injects the token back into the page.
+    Returns True if solved, False on failure.
+    """
+    import capsolver
 
-    if on_captcha_needed:
-        on_captcha_needed()
-    else:
-        print("\n" + "=" * 60)
-        print("  ACTION REQUIRED — solve the CAPTCHA in the browser,")
-        print("  then press ENTER here to continue.")
-        print("=" * 60)
-        input("  Press ENTER after solving CAPTCHA: ")
+    api_key = os.getenv("CAPSOLVER_API_KEY")
+    if not api_key:
+        print("  [CAPTCHA] CAPSOLVER_API_KEY not set in .env")
+        return False
 
-    click_next(page)
+    capsolver.api_key = api_key
+
+    # Extract the reCAPTCHA site key from the page
+    site_key = page.evaluate("""() => {
+        // 1. Try data-sitekey attribute
+        const el = document.querySelector('[data-sitekey]');
+        if (el) return el.getAttribute('data-sitekey');
+        // 2. Try extracting from any reCAPTCHA iframe src (k= parameter)
+        const iframes = document.querySelectorAll('iframe[src*="recaptcha"]');
+        for (const iframe of iframes) {
+            const m = iframe.src.match(/[?&]k=([A-Za-z0-9_-]{40})/);
+            if (m) return m[1];
+        }
+        // 3. Try the reCAPTCHA script tag
+        const scripts = document.querySelectorAll('script[src*="recaptcha"]');
+        for (const s of scripts) {
+            const m = s.src.match(/[?&]render=([A-Za-z0-9_-]{40})/);
+            if (m) return m[1];
+        }
+        return null;
+    }""")
+
+    if not site_key:
+        print("  [CAPTCHA] Could not find reCAPTCHA site key on page")
+        return False
+
+    print(f"  [CAPTCHA] Found site key: {site_key} (length: {len(site_key)})")
+    print("  [CAPTCHA] Sending to CapSolver (this may take 10-30s)...")
+
+    try:
+        solution = capsolver.solve({
+            "type": "ReCaptchaV2TaskProxyLess",
+            "websiteURL": page.url,
+            "websiteKey": site_key,
+        })
+        token = solution.get("gRecaptchaResponse", "")
+        if not token:
+            print("  [CAPTCHA] CapSolver returned empty token")
+            return False
+
+        print(f"  [CAPTCHA] Got token ({len(token)} chars), injecting into page...")
+
+        # Inject the token and fire any callbacks
+        page.evaluate("""(token) => {
+            document.querySelector('#g-recaptcha-response').value = token;
+            // Try standard callback from data-callback attribute
+            const el = document.querySelector('.g-recaptcha[data-callback]');
+            if (el) {
+                const fn = el.getAttribute('data-callback');
+                if (window[fn]) { window[fn](token); return; }
+            }
+            // Try reCAPTCHA internal callback
+            if (typeof ___grecaptcha_cfg !== 'undefined') {
+                const clients = ___grecaptcha_cfg.clients;
+                for (const key in clients) {
+                    const client = clients[key];
+                    for (const p in client) {
+                        const val = client[p];
+                        if (val && typeof val === 'object') {
+                            for (const s in val) {
+                                if (val[s] && typeof val[s].callback === 'function') {
+                                    val[s].callback(token);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }""", token)
+
+        print("  [CAPTCHA] Token injected successfully")
+        return True
+
+    except Exception as e:
+        print(f"  [CAPTCHA] CapSolver failed: {e}")
+        return False
 
 
 def step_page1_identification(page: Page, data: dict) -> None:
@@ -492,6 +624,7 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
+            channel="chrome",
             headless=False,
             slow_mo=SLOW_MO,
             args=[
@@ -499,78 +632,87 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
                 "--start-maximized",
             ],
         )
-        context = browser.new_context(
-            viewport=None,
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-        )
+        context = browser.new_context(viewport=None)
         page = context.new_page()
         page.set_default_timeout(TIMEOUT)
 
         try:
             step_navigate(page)
             step_click_permit_link(page)
-            step_captcha(page, on_captcha_needed=on_captcha_needed)
 
+            # --- CAPTCHA via CapSolver ---
+            print("\n[STEP 3] About / intro page — CAPTCHA required.")
+            debug_fields(page)
+
+            solved = _solve_captcha_with_capsolver(page)
+            if not solved:
+                print("  [CAPTCHA] CapSolver failed — waiting for manual solve")
+                if on_captcha_needed:
+                    on_captcha_needed()
+                # Wait for manual solve
+                timeout_s = 300
+                start = time.time()
+                while time.time() - start < timeout_s:
+                    try:
+                        token = page.evaluate(
+                            "() => document.querySelector('#g-recaptcha-response')?.value || ''"
+                        )
+                        if token:
+                            print("  [OK] CAPTCHA solved manually")
+                            solved = True
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(1)
+
+            if not solved:
+                print("  [WARN] CAPTCHA not solved — attempting to continue anyway")
+
+            time.sleep(1)
+            click_next(page)
+
+            # --- Continue with form filling ---
             if is_payment_page(page):
                 print(f"[Alabama] Reached payment page early — stopping.")
                 return {
-                    "permitId": permit_id,
-                    "driverName": driver_name,
-                    "tractor": tractor,
-                    "permitType": permit_type,
-                    "status": "success",
-                    "message": "Reached payment page",
+                    "permitId": permit_id, "driverName": driver_name,
+                    "tractor": tractor, "permitType": permit_type,
+                    "status": "success", "message": "Reached payment page",
                 }
 
             step_page1_identification(page, data)
 
             if is_payment_page(page):
                 return {
-                    "permitId": permit_id,
-                    "driverName": driver_name,
-                    "tractor": tractor,
-                    "permitType": permit_type,
-                    "status": "success",
-                    "message": "Reached payment page",
+                    "permitId": permit_id, "driverName": driver_name,
+                    "tractor": tractor, "permitType": permit_type,
+                    "status": "success", "message": "Reached payment page",
                 }
 
             step_page2_mailing_address(page, data)
 
             if is_payment_page(page):
                 return {
-                    "permitId": permit_id,
-                    "driverName": driver_name,
-                    "tractor": tractor,
-                    "permitType": permit_type,
-                    "status": "success",
-                    "message": "Reached payment page",
+                    "permitId": permit_id, "driverName": driver_name,
+                    "tractor": tractor, "permitType": permit_type,
+                    "status": "success", "message": "Reached payment page",
                 }
 
             step_page3_vehicle_details(page, data)
 
             print(f"\n[Alabama] Reached payment page — stopping as requested.")
             return {
-                "permitId": permit_id,
-                "driverName": driver_name,
-                "tractor": tractor,
-                "permitType": permit_type,
-                "status": "success",
-                "message": "Reached payment page",
+                "permitId": permit_id, "driverName": driver_name,
+                "tractor": tractor, "permitType": permit_type,
+                "status": "success", "message": "Reached payment page",
             }
 
         except Exception as e:
             print(f"\n[Alabama] Error for {driver_name}: {e}")
             return {
-                "permitId": permit_id,
-                "driverName": driver_name,
-                "tractor": tractor,
-                "permitType": permit_type,
-                "status": "error",
-                "message": str(e),
+                "permitId": permit_id, "driverName": driver_name,
+                "tractor": tractor, "permitType": permit_type,
+                "status": "error", "message": str(e),
             }
         finally:
             time.sleep(3)

@@ -9,6 +9,7 @@ class PermitOrderRequest(BaseModel):
     states: list[str]
     permitType: str
     effectiveDate: str
+    effectiveTime: Optional[str] = "12:00"
 
 
 class CaptchaSolvedRequest(BaseModel):

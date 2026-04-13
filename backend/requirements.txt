@@ -5,3 +5,4 @@ redis
 supabase
 playwright
 python-dotenv
+capsolver

@@ -17,7 +17,6 @@ Data flow:
 import os
 import re
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -33,31 +32,6 @@ TIMEOUT = 30_000
 
 # Company driver types — use Mega Trucking's USDOT
 COMPANY_TYPES = {"F", "LP"}
-
-
-# ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +136,6 @@ def step_login(page: Page, username: str, password: str) -> None:
     print("\n[STEP 1] Navigating to Alabama DOT OSOW portal and logging in...")
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
     _wait_for_page_settle(page)
-    _screenshot(page, "login_page")
 
     debug_fields(page)
 
@@ -237,7 +210,6 @@ def step_login(page: Page, username: str, password: str) -> None:
         raise Exception("Could not find Login button/link on login page")
 
     _wait_for_page_settle(page)
-    _screenshot(page, "after_login")
 
     # Verify we left the login page
     if "login" in page.url.lower():
@@ -269,7 +241,6 @@ def step_select_permit_type(page: Page) -> None:
             page.click(sel)
             print(f'  [CLICK] {sel}')
             _wait_for_page_settle(page)
-            _screenshot(page, "permit_type_selected")
             print("[OK] Permit type selected")
             return
         except PlaywrightTimeoutError:
@@ -284,11 +255,9 @@ def step_select_permit_type(page: Page) -> None:
         if "annual" in text.lower() and "oversize" in text.lower():
             link.click()
             _wait_for_page_settle(page)
-            _screenshot(page, "permit_type_selected")
             print(f'  [CLICK] Found and clicked: {text!r}')
             return
 
-    _screenshot(page, "permit_type_NOT_FOUND")
     raise Exception("Could not find 'Annual Oversize and/or Overweight' link on menu page")
 
 
@@ -306,7 +275,6 @@ def step_fill_form(page: Page, vin: str, effective_date: str) -> None:
     print("\n[FORM] Filling single-page permit form...")
 
     debug_fields(page)
-    _screenshot(page, "form_page")
 
     # ── Step 1: Acknowledgement checkbox ────────────────────────────
     print("\n  [SECTION] Step 1 — Acknowledgement")
@@ -321,14 +289,10 @@ def step_fill_form(page: Page, vin: str, effective_date: str) -> None:
     print("\n  [SECTION] Step 2 — Vehicle and Load Information")
     _safe_fill(page, 'input[name="TrkSerial"][type="text"]', vin, "VIN/Serial #")
 
-    _screenshot(page, "vin_filled")
-
     # ── Step 3: Travel Dates ────────────────────────────────────────
     print("\n  [SECTION] Step 3 — Travel Dates")
     date_formatted = _iso_to_mmddyyyy(effective_date)
     _safe_fill(page, 'input[name="fromdate"][type="text"]', date_formatted, "From Date")
-
-    _screenshot(page, "form_filled")
 
     # ── Step 5: Application Review — click Continue ─────────────────
     print("\n  [SECTION] Step 5 — Application Review")
@@ -353,8 +317,6 @@ def step_fill_form(page: Page, vin: str, effective_date: str) -> None:
     if not clicked:
         raise Exception("Could not find Continue button on Application Review")
 
-    _screenshot(page, "after_continue")
-
     print("[STOP] =============================================")
     print("[STOP] Application Review validated — NOT proceeding")
     print("[STOP] to payment. Human takes over from here.")
@@ -376,7 +338,7 @@ def run(
 
     Args:
         permit:           Enriched permit dict from the backend.
-        job_id:           The parent job ID (for screenshots/logging).
+        job_id:           The parent job ID (for logging).
         on_captcha_needed: Not used — kept for interface compatibility.
         company:          Company constants dict (not used for this portal —
                           only VIN, USDOT, and effective date are needed).
@@ -435,8 +397,6 @@ def run(
     print(f"[AL-OSOW] Starting permit {permit_id} for {driver_name} ({tractor})")
     print(f"[AL-OSOW] VIN: {vin} | USDOT: {usdot} | Eff. Date: {effective_date}")
 
-    _reset_screenshots(job_id)
-
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False,
@@ -473,7 +433,6 @@ def run(
 
         except Exception as e:
             print(f"\n[AL-OSOW] Error for {driver_name}: {e}")
-            _screenshot(page, "ERROR")
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,

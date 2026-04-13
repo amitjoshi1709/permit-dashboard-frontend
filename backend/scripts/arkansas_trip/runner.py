@@ -14,10 +14,8 @@ Data flow:
   → Stops after Payment Method → Next
 """
 
-import os
 import re
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -52,31 +50,6 @@ CONTACT = {
 
 PAYMENT_TYPE = "Credit Card"
 BODY_STYLE = "Tanker"
-
-
-# ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +509,7 @@ def run(
 
     Args:
         permit:           Enriched permit dict from the backend.
-        job_id:           The parent job ID (for screenshots/logging).
+        job_id:           The parent job ID (for logging).
         on_captcha_needed: Not used — no CAPTCHA on this portal.
         company:          Company constants dict (not used — address/contact
                           are hardcoded in this module).
@@ -584,8 +557,6 @@ def run(
     print(f"[AR-TRIP] Year: {year} | Make: {make} | Model: {model} | "
           f"Tag: {tag_state} {tag_number} | Eff. Date: {effective_date}")
 
-    _reset_screenshots(job_id)
-
     with sync_playwright() as p:
         browser = p.chromium.launch(
             channel="chrome",
@@ -622,10 +593,6 @@ def run(
 
         except Exception as e:
             print(f"\n[AR-TRIP] Error for {driver_name}: {e}")
-            try:
-                _screenshot(page, "ERROR")
-            except Exception:
-                pass
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,
