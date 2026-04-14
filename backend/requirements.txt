@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+celery[redis]
+redis
+supabase
+playwright
+python-dotenv
+capsolver

@@ -9,18 +9,27 @@ export default function DashboardView({ onNavigate }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchPermitHistory(), fetchBlanketPermits()]).then(([h, b]) => {
-      setHistory(h);
-      setBlankets(b);
-      setLoading(false);
-    });
+    Promise.all([fetchPermitHistory(), fetchBlanketPermits()])
+      .then(([h, b]) => {
+        setHistory(Array.isArray(h) ? h : []);
+        setBlankets(Array.isArray(b) ? b : []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const recent = [...history].reverse().slice(0, 8);
 
   function daysUntil(expStr) {
-    const parts = expStr.split("/");
-    const expDate = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+    if (!expStr) return 999;
+    let expDate;
+    if (expStr.includes("/")) {
+      const [m, d, y] = expStr.split("/");
+      expDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+    } else {
+      expDate = new Date(expStr);
+    }
+    if (isNaN(expDate)) return 999;
     return Math.round((expDate - new Date()) / 86400000);
   }
 
@@ -60,7 +69,7 @@ export default function DashboardView({ onNavigate }) {
               </thead>
               <tbody>
                 {recent.map((p) => {
-                  const initials = p.driverName.split(",")[0].substring(0, 2).toUpperCase();
+                  const initials = (p.driverName || "??").split(",")[0].substring(0, 2).toUpperCase();
                   return (
                     <tr key={p.id} className="hover:bg-navy-3 transition-colors cursor-pointer">
                       <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-xs text-txt-3">{p.id}</td>

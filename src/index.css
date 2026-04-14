@@ -20,7 +20,7 @@ body {
 ::-webkit-scrollbar-thumb { background: #2C4B6E; border-radius: 10px; }
 
 /* Form inputs */
-select, input[type="text"], input[type="email"], input[type="tel"], input[type="date"] {
+select, input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="time"], input[type="number"] {
   width: 100%;
   background: #1D2E44;
   border: 1px solid rgba(255,255,255,0.12);
@@ -35,3 +35,6 @@ select, input[type="text"], input[type="email"], input[type="tel"], input[type="
 select:focus, input:focus { border-color: #4A9DDA; }
 select { cursor: pointer; }
 input::placeholder { color: #6B8CAE; }
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

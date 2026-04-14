@@ -1,17 +1,27 @@
+function parseDate(str) {
+  if (!str) return null;
+  // Handle both MM/DD/YYYY and YYYY-MM-DD
+  if (str.includes("/")) {
+    const [m, d, y] = str.split("/");
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  }
+  return new Date(str);
+}
+
 export default function StatCards({ history, blanketCount }) {
   const active = history.filter((p) => p.status === "Active");
   const pending = history.filter((p) => p.status === "Pending");
-  const pendingFees = pending.reduce((s, p) => s + p.fee, 0);
+  const pendingFees = pending.reduce((s, p) => s + (p.fee || 0), 0);
 
   const now = new Date();
   const thisMonth = history.filter((p) => {
-    const parts = p.effDate.split("/");
-    return parseInt(parts[0]) === now.getMonth() + 1 && parseInt(parts[2]) === now.getFullYear();
+    const d = parseDate(p.effDate);
+    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
 
   const expiringSoon = active.filter((p) => {
-    const parts = p.expDate.split("/");
-    const expDate = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+    const expDate = parseDate(p.expDate);
+    if (!expDate || isNaN(expDate)) return false;
     const diff = Math.round((expDate - now) / 86400000);
     return diff <= 7 && diff >= 0;
   });

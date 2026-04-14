@@ -12,15 +12,15 @@ export default function HistoryTable() {
 
   function load() {
     setLoading(true);
-    fetchPermitHistory().then((data) => {
-      setHistory(data);
-      setLoading(false);
-    });
+    fetchPermitHistory()
+      .then((data) => setHistory(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => { load(); }, []);
 
-  let filtered = [...history].reverse();
+  let filtered = [...history];
   if (typeFilter !== "all") filtered = filtered.filter((p) => p.type === typeFilter);
   if (statusFilter !== "all") filtered = filtered.filter((p) => p.status === statusFilter);
 
@@ -86,7 +86,7 @@ export default function HistoryTable() {
           </thead>
           <tbody>
             {filtered.map((p) => {
-              const initials = p.driverName.split(",")[0].substring(0, 2).toUpperCase();
+              const initials = (p.driverName || "??").split(",")[0].substring(0, 2).toUpperCase();
               return (
                 <tr key={p.id} className="hover:bg-navy-3 transition-colors cursor-pointer">
                   <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-xs text-txt-3">{p.id}</td>
