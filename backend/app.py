@@ -80,78 +80,94 @@ def order_permits(body: PermitOrderRequest):
     if not drivers:
         raise HTTPException(400, "No valid driver IDs provided")
 
-    # Build automation permits list (driver × state combinations)
+    # For states with separate trip/fuel forms, split "trip_fuel" into two
+    # permits so they're tracked and processed independently by the queue.
+    SPLIT_TRIP_FUEL_STATES = {"GA"}
+
+    def expand_permit_types(state: str, permit_type: str) -> list[str]:
+        if state in SPLIT_TRIP_FUEL_STATES and permit_type == "trip_fuel":
+            return ["trip", "fuel"]
+        return [permit_type]
+
+    # Build automation permits list (driver × state × expanded-type combinations)
     job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
     permits = []
     permit_rows = []
 
     # Pre-generate all permit IDs in one query to avoid duplicates
-    total_permits = len(drivers) * len(body.states)
+    total_permits = sum(
+        len(expand_permit_types(state, body.permitType))
+        for _ in drivers
+        for state in body.states
+    )
     permit_ids = generate_permit_ids(total_permits)
     id_index = 0
 
     for driver in drivers:
         for state in body.states:
-            permit_id = permit_ids[id_index]
-            id_index += 1
-            driver_name = f"{driver['lastName']}, {driver['firstName']}"
+            for expanded_type in expand_permit_types(state, body.permitType):
+                permit_id = permit_ids[id_index]
+                id_index += 1
+                driver_name = f"{driver['lastName']}, {driver['firstName']}"
 
-            # Build insurance object
-            if driver.get("driverType") in COMPANY_TYPES:
-                insurance = {
-                    "company": COMPANY_DRIVER_DEFAULTS["insurance_company"],
-                    "effectiveDate": COMPANY_DRIVER_DEFAULTS["insurance_effective"],
-                    "expirationDate": COMPANY_DRIVER_DEFAULTS["insurance_expiration"],
-                    "policyNumber": COMPANY_DRIVER_DEFAULTS["policy_number"],
-                }
-                usdot = COMPANY_DRIVER_DEFAULTS["usdot"]
-            else:
-                insurance = {
-                    "company": driver.get("insuranceCompany", ""),
-                    "effectiveDate": driver.get("insuranceEffective", ""),
-                    "expirationDate": driver.get("insuranceExpiration", ""),
-                    "policyNumber": driver.get("policyNumber", ""),
-                }
-                usdot = driver.get("usdot", "")
+                # Build insurance object
+                if driver.get("driverType") in COMPANY_TYPES:
+                    insurance = {
+                        "company": COMPANY_DRIVER_DEFAULTS["insurance_company"],
+                        "effectiveDate": COMPANY_DRIVER_DEFAULTS["insurance_effective"],
+                        "expirationDate": COMPANY_DRIVER_DEFAULTS["insurance_expiration"],
+                        "policyNumber": COMPANY_DRIVER_DEFAULTS["policy_number"],
+                    }
+                    usdot = COMPANY_DRIVER_DEFAULTS["usdot"]
+                else:
+                    insurance = {
+                        "company": driver.get("insuranceCompany", ""),
+                        "effectiveDate": driver.get("insuranceEffective", ""),
+                        "expirationDate": driver.get("insuranceExpiration", ""),
+                        "policyNumber": driver.get("policyNumber", ""),
+                    }
+                    usdot = driver.get("usdot", "")
 
-            # Supabase row — inserted as Pending before automation runs
-            permit_rows.append({
-                "id": permit_id,
-                "job_id": job_id,
-                "driver_id": driver["id"],
-                "driver_name": driver_name,
-                "tractor": driver["tractor"],
-                "state": state,
-                "permit_type": body.permitType,
-                "status": "Pending",
-                "eff_date": body.effectiveDate or "",
-                "fee": 0,
-            })
-
-            permit_data = {
-                "permitId": permit_id,
-                "state": state,
-                "permitType": body.permitType,
-                "effectiveDate": body.effectiveDate or "",
-                "extraFields": body.extraFields,
-                "driver": {
-                    "firstName": driver["firstName"],
-                    "lastName": driver["lastName"],
-                    "driverType": driver.get("driverType", ""),
-                    "driverCode": driver.get("driverCode", ""),
+                # Supabase row — inserted as Pending before automation runs
+                permit_rows.append({
+                    "id": permit_id,
+                    "job_id": job_id,
+                    "driver_id": driver["id"],
+                    "driver_name": driver_name,
                     "tractor": driver["tractor"],
-                    "year": driver.get("year"),
-                    "make": driver.get("make", ""),
+                    "state": state,
+                    "permit_type": expanded_type,
+                    "status": "Pending",
+                    "eff_date": body.effectiveDate,
+                    "fee": 0,
+                })
+
+                permit_data = {
+                    "permitId": permit_id,
+                    "state": state,
+                    "permitType": expanded_type,
+                    "effectiveDate": body.effectiveDate or "",
+                "extraFields": body.extraFields,
+                    "effectiveTime": body.effectiveTime or "12:00",
+                    "driver": {
+                        "firstName": driver["firstName"],
+                        "lastName": driver["lastName"],
+                        "driverType": driver.get("driverType", ""),
+                        "driverCode": driver.get("driverCode", ""),
+                        "tractor": driver["tractor"],
+                        "year": driver.get("year"),
+                        "make": driver.get("make", ""),
                     "model": driver.get("model", ""),
-                    "vin": driver.get("vin", ""),
-                    "tagNumber": driver.get("tagNumber", ""),
-                    "tagState": driver.get("tagState", ""),
-                    "usdot": usdot,
-                    "fein": driver.get("fein", ""),
-                    "insurance": insurance,
-                },
-            }
-            permits.append(permit_data)
+                        "model": driver.get("model", ""),
+                        "vin": driver.get("vin", ""),
+                        "tagNumber": driver.get("tagNumber", ""),
+                        "tagState": driver.get("tagState", ""),
+                        "usdot": usdot,
+                        "fein": driver.get("fein", ""),
+                        "insurance": insurance,
+                    },
+                }
+                permits.append(permit_data)
 
     # Insert permits into Supabase as Pending
     insert_permits(permit_rows)

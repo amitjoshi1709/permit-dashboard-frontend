@@ -27,8 +27,6 @@ from scripts.alabama_tf.runner import run as run_alabama_tf
 from scripts.alabama_osow.runner import run as run_alabama_osow
 from scripts.georgia_tf.runner import run as run_georgia_tf
 from scripts.arkansas_trip.runner import run as run_arkansas_trip
-from scripts.georgia_osow.runner import run as run_georgia_osow
-from scripts.florida_trip.runner import run as run_florida_trip
 
 # Registry key: (state, permitType) for state+type-specific runners.
 # Fallback: (state, None) matches any permit type for that state.
@@ -37,17 +35,9 @@ SCRIPT_REGISTRY = {
     ("AL", "trip"):      run_alabama_tf,
     ("AL", "fuel"):      run_alabama_tf,
     ("AL", "os_ow"):     run_alabama_osow,
-    ("GA", "trip_fuel"):  run_georgia_tf,
-    ("GA", "trip"):       run_georgia_tf,
-    ("GA", "fuel"):       run_georgia_tf,
-    ("GA", "os_ow"):      run_georgia_osow,
-    ("AR", None):         run_arkansas_trip,
-    ("FL", "trip"):                    run_florida_trip,
-    ("FL", "fuel"):                    run_florida_trip,
-    ("FL", "trip_fuel"):               run_florida_trip,
-    ("FL", "fl_blanket_bulk"):         run_florida_trip,
-    ("FL", "fl_blanket_inner_bridge"): run_florida_trip,
-    ("FL", "fl_blanket_flatbed"):      run_florida_trip,
+    ("GA", None):        run_georgia_tf,   # GA uses same runner for all types
+    ("AR", None):        run_arkansas_trip, # AR uses same runner for all types
+    # ("FL", None):      run_florida,
     # ...add new states here
 }
 

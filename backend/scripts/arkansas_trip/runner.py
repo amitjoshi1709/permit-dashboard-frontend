@@ -14,10 +14,15 @@ Data flow:
   → Stops after Payment Method → Next
 """
 
+<<<<<<< HEAD
 import os
 import re
 import time
 from pathlib import Path
+=======
+import re
+import time
+>>>>>>> f2a53e6e932f3f753011640562f18d9f75e4abae
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -55,6 +60,7 @@ BODY_STYLE = "Tanker"
 
 
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
 # Screenshot helpers
 # ---------------------------------------------------------------------------
 
@@ -80,6 +86,8 @@ def _screenshot(page: Page, name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+=======
+>>>>>>> f2a53e6e932f3f753011640562f18d9f75e4abae
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -536,7 +544,11 @@ def run(
 
     Args:
         permit:           Enriched permit dict from the backend.
+<<<<<<< HEAD
         job_id:           The parent job ID (for screenshots/logging).
+=======
+        job_id:           The parent job ID (for logging).
+>>>>>>> f2a53e6e932f3f753011640562f18d9f75e4abae
         on_captcha_needed: Not used — no CAPTCHA on this portal.
         company:          Company constants dict (not used — address/contact
                           are hardcoded in this module).
@@ -584,8 +596,11 @@ def run(
     print(f"[AR-TRIP] Year: {year} | Make: {make} | Model: {model} | "
           f"Tag: {tag_state} {tag_number} | Eff. Date: {effective_date}")
 
+<<<<<<< HEAD
     _reset_screenshots(job_id)
 
+=======
+>>>>>>> f2a53e6e932f3f753011640562f18d9f75e4abae
     with sync_playwright() as p:
         browser = p.chromium.launch(
             channel="chrome",
@@ -622,10 +637,13 @@ def run(
 
         except Exception as e:
             print(f"\n[AR-TRIP] Error for {driver_name}: {e}")
+<<<<<<< HEAD
             try:
                 _screenshot(page, "ERROR")
             except Exception:
                 pass
+=======
+>>>>>>> f2a53e6e932f3f753011640562f18d9f75e4abae
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,

@@ -9,7 +9,6 @@ Key differences from Alabama:
   - Uses account number entry to reach the permit form
   - trip_fuel = TWO separate form submissions (ITP + MFTP)
   - Has strict safety checks before clicking Proceed
-  - Takes screenshots at every step
 
 Data flow:
   Backend builds permit dict (driver details from Supabase)
@@ -19,7 +18,6 @@ Data flow:
 
 import os
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -56,7 +54,8 @@ SELECTORS = {
     },
     "permit_details": {
         "permit_type":      "select#PermitType",
-        "permit_eff_date":  "input#PermitEffDateTime",
+        # ITP uses #PermitEffDateTime, MFTP uses #PermitEffDate — try both
+        "permit_eff_date":  "input#PermitEffDateTime, input#PermitEffDate",
         "permit_issue_date":"input#PermitIssueDate",
         "permit_exp_date":  "input#PermitExpDate",
         "permit_fee":       "input#PermitFee",
@@ -105,34 +104,7 @@ MAKE_DROPDOWN_MAP = {
 # ---------------------------------------------------------------------------
 
 class PermitError(Exception):
-    def __init__(self, message: str, screenshot_path: str = None):
-        super().__init__(message)
-        self.screenshot_path = screenshot_path
-
-
-# ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -140,16 +112,9 @@ def _screenshot(page: Page, name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _fatal(page: Page, message: str):
-    """Take error screenshot then raise PermitError."""
+    """Log fatal error and raise PermitError."""
     print(f"\n  [FATAL] {message}")
-    err_screenshot = None
-    try:
-        err_screenshot = os.path.join(_screenshot_dir, f"ERROR_{int(time.time() * 1000)}.png")
-        page.screenshot(path=err_screenshot, full_page=True)
-        print(f"  [FATAL] Error screenshot saved: {err_screenshot}")
-    except Exception as e:
-        print(f"  [FATAL] Could not save error screenshot: {e}")
-    raise PermitError(message, err_screenshot)
+    raise PermitError(message)
 
 
 def _safe_fill(page: Page, selector: str, value: str, field_name: str):
@@ -169,24 +134,46 @@ def _safe_fill(page: Page, selector: str, value: str, field_name: str):
 
 
 def _safe_select(page: Page, selector: str, value: str, field_name: str):
-    """Select a dropdown option by label with verification."""
+    """Select a dropdown option by label. Reads available options first,
+    then matches exact → prefix → substring (no wasted waits on missing labels)."""
     try:
         page.wait_for_selector(selector, timeout=5000)
         locator = page.locator(selector).first
     except PlaywrightTimeoutError:
         _fatal(page, f'Dropdown selector not found for "{field_name}": {selector}')
 
-    try:
-        locator.select_option(label=value)
-    except Exception as e:
-        _fatal(page, f'Dropdown option not found for "{field_name}". Looking for label: "{value}". Error: {e}')
-
-    selected_label = locator.evaluate(
-        "el => { const opt = el.options[el.selectedIndex]; return opt ? opt.text : ''; }"
+    # Read all options up front so we can match flexibly without waiting.
+    options = locator.evaluate(
+        "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
     )
-    if selected_label != value:
-        _fatal(page, f'Dropdown mismatch on "{field_name}". Expected: "{value}", Selected: "{selected_label}"')
-    print(f'  [SELECT] {field_name}: "{value}" \u2713')
+
+    # 1. Exact label match
+    for o in options:
+        if o["text"] == value:
+            locator.select_option(value=o["value"])
+            print(f'  [SELECT] {field_name}: "{value}" \u2713')
+            return
+
+    # 2. Prefix match (e.g., "MFTP" matches "MFTP - MFTP PERMIT")
+    prefix = value.split(" - ")[0].strip() if " - " in value else value.strip()
+    for o in options:
+        if o["text"].startswith(prefix + " ") or o["text"].startswith(prefix + "-") or o["text"] == prefix:
+            locator.select_option(value=o["value"])
+            print(f'  [SELECT] {field_name}: "{o["text"]}" (matched prefix "{prefix}") \u2713')
+            return
+
+    # 3. Substring match
+    for o in options:
+        if value.lower() in o["text"].lower() or o["text"].lower() in value.lower():
+            locator.select_option(value=o["value"])
+            print(f'  [SELECT] {field_name}: "{o["text"]}" (contains match) \u2713')
+            return
+
+    # Nothing matched — log all options
+    print(f'  [FATAL] No match for {field_name} = "{value}". Available options:')
+    for o in options:
+        print(f'    - {o["text"]!r}')
+    _fatal(page, f'Dropdown option not found for "{field_name}". Looking for: "{value}"')
 
 
 def _wait_for_autofill(page: Page, selector: str, field_name: str, timeout: int = 10000) -> str:
@@ -222,7 +209,6 @@ def _login(page: Page, username: str, password: str):
     """Log into the Georgia portal."""
     print("\n[ACT] Logging in...")
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
-    _screenshot(page, "login_page_loaded")
 
     _safe_fill(page, SELECTORS["login"]["username"], username, "User ID")
     _safe_fill(page, SELECTORS["login"]["password"], password, "Password")
@@ -238,7 +224,6 @@ def _login(page: Page, username: str, password: str):
     if "/Login" in page.url:
         _fatal(page, "Login failed — still on login page after sign-on. Check credentials.")
 
-    _screenshot(page, "login_successful")
     print("[OK] Login successful")
 
 
@@ -273,7 +258,6 @@ def _navigate_to_generate_trip_permit(page: Page):
     except PlaywrightTimeoutError:
         _fatal(page, "Generate Trip Permit page did not load (account number field not found)")
 
-    _screenshot(page, "navigate_generate_trip_permit")
     print("[OK] Navigated to Generate Trip Permit")
 
 
@@ -307,7 +291,6 @@ def _enter_account_number(page: Page, account_no: str):
     except PlaywrightTimeoutError:
         _fatal(page, '"Create Permit" clicked but permit form did not load (PermitType dropdown missing)')
 
-    _screenshot(page, "permit_form_loaded")
     print("[OK] Permit form loaded")
 
 
@@ -318,28 +301,66 @@ def _fill_permit_details(page: Page, data: dict):
 
     # Dismiss any calendar popup
     page.keyboard.press("Escape")
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(2000)  # let the form re-render for the selected type
 
-    # PermitEffDateTime format: "MM/DD/YYYY HH:MM:SS AM"
+    # Debug: dump visible fields after permit type is selected — helps us see
+    # if MFTP uses different field IDs than ITP
+    try:
+        print("  [DEBUG] Visible fields after permit type selection:")
+        field_info = page.evaluate("""
+            () => Array.from(document.querySelectorAll('input:not([type=hidden]), select, textarea'))
+                .filter(el => el.offsetParent !== null)
+                .map(el => ({id: el.id, name: el.name, type: el.type, placeholder: el.placeholder || ''}))
+        """)
+        for f in field_info[:30]:
+            print(f"    id={f['id']!r:30s} name={f['name']!r:30s} type={f['type']!r}")
+    except Exception as e:
+        print(f"  [DEBUG] Could not dump fields: {e}")
+
+    # ITP uses PermitEffDateTime (with time), MFTP uses PermitEffDate (date only)
     date_field = page.locator(SELECTORS["permit_details"]["permit_eff_date"]).first
+    try:
+        date_field.wait_for(state="visible", timeout=5_000)
+    except PlaywrightTimeoutError:
+        _fatal(page, f'Permit Eff. Date field not visible after selecting "{data["permit_type"]}". See DEBUG output above for actual fields on page.')
+
+    # Determine if this is the datetime variant (ITP) or date-only (MFTP)
+    field_id = date_field.evaluate("el => el.id")
+    is_datetime = field_id == "PermitEffDateTime"
+
     auto_filled = date_field.input_value()
     desired_date = normalize_date(data["permit_eff_date"])
-    desired_datetime = desired_date + " 12:00:00 AM"
-    print(f'  [AUTO] Permit Eff. DateTime auto-filled: "{auto_filled}"')
 
-    if auto_filled.startswith(desired_date):
-        print(f'  [OK] Permit Eff. Date already matches: "{desired_date}" \u2713')
+    if is_datetime:
+        # Convert 24h time (e.g., "14:30") to portal format "HH:MM:SS AM/PM"
+        raw_time = data.get("permit_eff_time", "12:00")
+        try:
+            h, m = [int(x) for x in raw_time.split(":")]
+            period = "AM" if h < 12 else "PM"
+            h12 = h % 12 or 12
+            portal_time = f"{str(h12).zfill(2)}:{str(m).zfill(2)}:00 {period}"
+        except Exception:
+            portal_time = "12:00:00 AM"
+        desired_value = f"{desired_date} {portal_time}"
     else:
-        print(f'  [WARN] Date mismatch: want "{desired_date}", got "{auto_filled}". Updating...')
+        desired_value = desired_date
+
+    print(f'  [AUTO] Permit Eff. Date ({field_id}) auto-filled: "{auto_filled}"')
+    print(f'  [INFO] Desired value: "{desired_value}"')
+
+    if auto_filled == desired_value:
+        print(f'  [OK] Permit Eff. Date already matches: "{desired_value}" \u2713')
+    else:
+        print(f'  [WARN] Value mismatch: want "{desired_value}", got "{auto_filled}". Updating...')
         date_field.click(click_count=3)
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
         date_field.click(click_count=3)
-        page.keyboard.type(desired_datetime, delay=50)
+        page.keyboard.type(desired_value, delay=50)
         date_field.press("Tab")
         page.wait_for_timeout(500)
         new_val = date_field.input_value()
-        print(f'  [FILL] Permit Eff. DateTime updated to: "{new_val}" \u2713')
+        print(f'  [FILL] Permit Eff. Date updated to: "{new_val}" \u2713')
 
     page.wait_for_timeout(2000)
 
@@ -354,7 +375,6 @@ def _fill_permit_details(page: Page, data: dict):
     except Exception:
         print("  [AUTO] Could not read auto-filled fields (may not be visible yet)")
 
-    _screenshot(page, "permit_details_filled")
     print("[VERIFY] Permit Details section complete")
 
 
@@ -377,7 +397,6 @@ def _fill_motor_carrier(page: Page, data: dict):
     print(f'  [AUTO] Carrier Name: "{carrier_name}"')
 
     page.wait_for_timeout(1000)
-    _screenshot(page, "motor_carrier_filled")
     print("[VERIFY] Motor Carrier section complete")
 
 
@@ -397,7 +416,6 @@ def _fill_vehicle_details(page: Page, data: dict):
     _safe_select(page, SELECTORS["vehicle_details"]["state_of_reg"],data["state_of_registration"],   "State of Registration")
     _safe_fill(page, SELECTORS["vehicle_details"]["unladen_weight"],data["unladen_weight"],          "Unladen Weight")
 
-    _screenshot(page, "vehicle_details_filled")
     print("[VERIFY] Vehicle Details section complete")
 
 
@@ -409,7 +427,6 @@ def _fill_insurance_details(page: Page, data: dict):
     _safe_fill(page, SELECTORS["insurance_details"]["exp_date"],  normalize_date(data["insurance_exp_date"]), "Insurance Exp. Date")
     _safe_fill(page, SELECTORS["insurance_details"]["policy_no"], data["policy_no"],                          "Policy No.")
 
-    _screenshot(page, "insurance_details_filled")
     print("[VERIFY] Insurance Details section complete")
 
 
@@ -435,15 +452,13 @@ def _fill_operator_details(page: Page):
             _fatal(page, "USDOT radio button was clicked but is not checked")
         print("  [SELECT] USDOT radio button clicked \u2713")
 
-    _screenshot(page, "operator_details_filled")
     print("[VERIFY] Operator Details section complete")
 
 
 def _click_proceed_to_payment(page: Page):
     """
     Click the Proceed button to advance to the payment page.
-    Waits for the payment page to load, takes a screenshot, but does
-    NOT interact with anything on the payment page.
+    Does NOT interact with anything on the payment page.
     """
     print("\n[ACT] Clicking Proceed to advance to payment page...")
     proceed_btn = page.locator(SELECTORS["add_to_cart"]["proceed"]).first
@@ -454,18 +469,13 @@ def _click_proceed_to_payment(page: Page):
     page.wait_for_load_state("networkidle", timeout=15_000)
     time.sleep(2)  # Brief pause to let the payment page fully render
 
-    _screenshot(page, "payment_page_reached")
     print("[STOP] =============================================")
     print("[STOP] Payment page reached — NOT entering payment.")
     print("[STOP] =============================================\n")
 
 
-def _fill_one_permit_form(page: Page, data: dict) -> str:
-    """
-    Fill one complete permit form (all sections).
-    Clicks Proceed to reach the payment page, then stops.
-    Returns the final screenshot path.
-    """
+def _fill_one_permit_form(page: Page, data: dict) -> None:
+    """Fill one complete permit form (all sections), stop at payment page."""
     _navigate_to_generate_trip_permit(page)
     _enter_account_number(page, data["account_no"])
     _fill_permit_details(page, data)
@@ -473,12 +483,7 @@ def _fill_one_permit_form(page: Page, data: dict) -> str:
     _fill_vehicle_details(page, data)
     _fill_insurance_details(page, data)
     _fill_operator_details(page)
-
-    _screenshot(page, "form_complete")
     _click_proceed_to_payment(page)
-
-    screenshot_path = _screenshot(page, "payment_page_final")
-    return screenshot_path
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +504,7 @@ def run(
 
     Args:
         permit:           Enriched permit dict from the backend.
-        job_id:           The parent job ID (for logging/screenshots).
+        job_id:           The parent job ID (for logging).
         on_captcha_needed: Not used for Georgia (login-based, no CAPTCHA).
                           Kept for interface compatibility with Alabama.
         company:          Company constants dict (not used for Georgia —
@@ -558,7 +563,6 @@ def run(
     print(f"[Georgia] Will fill {len(portal_data_list)} form(s): "
           + ", ".join(d["_portalPermitType"] for d in portal_data_list))
 
-    _reset_screenshots(job_id)
     form_results = []
 
     with sync_playwright() as p:
@@ -595,24 +599,21 @@ def run(
                     print("[WARN] Session expired — re-logging in...")
                     _login(page, username, password)
 
-                global _screenshot_counter
-                _screenshot_counter = 0
-
                 try:
-                    screenshot_path = _fill_one_permit_form(page, portal_data)
+                    _fill_one_permit_form(page, portal_data)
                     form_results.append({
                         "permitType": portal_data["_portalPermitType"],
                         "status": "success",
-                        "screenshot": screenshot_path,
                     })
                 except PermitError as e:
+                    print(f"  [FORM ERROR] {portal_data['_portalPermitType']}: {e}")
                     form_results.append({
                         "permitType": portal_data["_portalPermitType"],
                         "status": "error",
                         "message": str(e),
-                        "screenshot": e.screenshot_path,
                     })
                 except Exception as e:
+                    print(f"  [FORM ERROR] {portal_data['_portalPermitType']}: Unexpected: {e}")
                     form_results.append({
                         "permitType": portal_data["_portalPermitType"],
                         "status": "error",

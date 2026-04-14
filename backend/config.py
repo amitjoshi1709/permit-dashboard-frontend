@@ -32,7 +32,7 @@ COMPANY_DRIVER_DEFAULTS = {
 
 COMPANY_TYPES = {"F", "LP", "T"}
 
-SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX", "AR"}
+SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX", "AR", "AR"}
 VALID_PERMIT_TYPES = {
     "trip_fuel", "os_ow", "trip", "fuel",
     # Florida-only blanket variants

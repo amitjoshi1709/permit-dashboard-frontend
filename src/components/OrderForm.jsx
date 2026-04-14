@@ -1,3 +1,6 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, signalCaptchaSolved } from "../api";
+import JobTracker from "./JobTracker";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, fetchFormFields } from "../api";
 import LogConsole from "./LogConsole";
@@ -35,11 +38,12 @@ export default function OrderForm({ onToast }) {
   // ── Job processing ──
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [logMessages, setLogMessages] = useState([]);
-  // Map<jobId, intervalId> so multiple queued jobs each get their own interval
-  // and each one is cleared independently when its job completes.
-  const pollingRef = useRef(new Map());
-  const seenResultsRef = useRef(new Set());
+  const [waitingCaptcha, setWaitingCaptcha] = useState(false);
+
+  // --- Job tracking (replaces log messages) ---
+  const [jobs, setJobs] = useState([]);
+  const pollIntervalsRef = useRef({});
+  const activeJobIdRef = useRef(null);
 
   useEffect(() => {
     fetchDrivers()
@@ -52,8 +56,7 @@ export default function OrderForm({ onToast }) {
         setLoading(false);
       });
     return () => {
-      for (const id of pollingRef.current.values()) clearInterval(id);
-      pollingRef.current.clear();
+      Object.values(pollIntervalsRef.current).forEach(clearInterval);
     };
   }, []);
 
@@ -94,9 +97,7 @@ export default function OrderForm({ onToast }) {
   }
 
   function addDriver(id) {
-    if (!selectedDrivers.includes(id)) {
-      setSelectedDrivers((prev) => [...prev, id]);
-    }
+    if (!selectedDrivers.includes(id)) setSelectedDrivers((prev) => [...prev, id]);
     setSearch("");
   }
 
@@ -108,10 +109,9 @@ export default function OrderForm({ onToast }) {
     ? drivers.filter((d) => {
         if (selectedDrivers.includes(d.id)) return false;
         const q = search.toLowerCase();
-        const name = (d.name || "").toLowerCase();
-        const tractor = (d.tractor || "").toLowerCase();
-        const id = String(d.id || "").toLowerCase();
-        return name.includes(q) || tractor.includes(q) || id.includes(q);
+        return (d.name || "").toLowerCase().includes(q)
+          || (d.tractor || "").toLowerCase().includes(q)
+          || String(d.id || "").toLowerCase().includes(q);
       })
     : [];
 
@@ -179,51 +179,107 @@ export default function OrderForm({ onToast }) {
     if (pollingRef.current.has(jobId)) return;
     setProcessing(true);
 
-    const intervalId = setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
         const data = await fetchJobStatus(jobId);
 
-        if (data.results) {
-          for (const r of data.results) {
-            const key = `${r.permitId}-${r.status}`;
-            if (seenResultsRef.current.has(key)) continue;
-            seenResultsRef.current.add(key);
+        // Merge backend results into initial placeholders so all permits stay visible.
+        // Backend results have permitId; match by driverName+permitType or just append.
+        setJobs((prev) =>
+          prev.map((j) => {
+            if (j.jobId !== jobId) return j;
+            const results = data.results || [];
+            const resultIds = new Set(results.map((r) => r.permitId));
 
-            if (r.status === "success") {
-              addLog(`${r.driverName} · ${r.tractor || ""} · ${r.permitType} — completed`, "success");
-            } else if (r.status === "error") {
-              addLog(`${r.driverName} — ${r.message || "failed"}`, "error");
-            } else {
-              addLog(`${r.driverName} · ${r.permitType} — ${r.status}`, "info");
+            const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+            // Update existing placeholders with real results
+            const merged = j.permits.map((p) => {
+              // Find a matching result by driver name
+              const match = results.find(
+                (r) => r.driverName === p.driverName && !p.permitId && r.status !== undefined
+              );
+              if (match) {
+                const isDone = match.status === "success" || match.status === "error";
+                return { ...p, ...match, finishedAt: isDone && !p.finishedAt ? now : p.finishedAt };
+              }
+              // If this permit already has a permitId, update from results
+              if (p.permitId) {
+                const updated = results.find((r) => r.permitId === p.permitId);
+                if (updated) {
+                  const isDone = updated.status === "success" || updated.status === "error";
+                  return { ...p, ...updated, finishedAt: isDone && !p.finishedAt ? now : p.finishedAt };
+                }
+              }
+              return p;
+            });
+
+            // Add any results not already in placeholders (e.g., trip_fuel expansion)
+            for (const r of results) {
+              const alreadyTracked = merged.some(
+                (m) => m.permitId === r.permitId || (m.driverName === r.driverName && m.status === r.status && m.permitType === r.permitType)
+              );
+              if (!alreadyTracked) {
+                const isDone = r.status === "success" || r.status === "error";
+                merged.push({ ...r, state: j.state, finishedAt: isDone ? now : undefined });
+              }
             }
-          }
+
+            return { ...j, status: data.status, permits: merged, summary: data.summary };
+          })
+        );
+
+        // CAPTCHA
+        if (data.status === "waiting_captcha") {
+          setWaitingCaptcha(true);
+          activeJobIdRef.current = jobId;
+        } else if (waitingCaptcha && activeJobIdRef.current === jobId) {
+          setWaitingCaptcha(false);
         }
 
+        // Done
         if (data.status === "complete" || data.status === "failed") {
-          const thisInterval = pollingRef.current.get(jobId);
-          if (thisInterval) clearInterval(thisInterval);
-          pollingRef.current.delete(jobId);
-          if (pollingRef.current.size === 0) setProcessing(false);
+          clearInterval(interval);
+          delete pollIntervalsRef.current[jobId];
+
+          // Check if ALL jobs are done
+          const stillRunning = Object.keys(pollIntervalsRef.current).length > 0;
+          if (!stillRunning) {
+            setProcessing(false);
+            setWaitingCaptcha(false);
+            activeJobIdRef.current = null;
+          }
 
           if (data.summary) {
-            const { total, succeeded, failed } = data.summary;
-            addLog(`Job complete: ${succeeded} of ${total} permits succeeded${failed > 0 ? `, ${failed} failed` : ""}`, failed === 0 ? "success" : "error");
-
+            const { succeeded, failed, total } = data.summary;
             if (failed === 0) {
-              onToast?.("\u2713", `All ${succeeded} permits completed successfully`);
-            } else if (succeeded > 0) {
-              onToast?.("\u26a0", `${failed} of ${total} permits failed`);
+              onToast?.("✓", `${succeeded} permit${succeeded > 1 ? "s" : ""} completed`);
             } else {
-              onToast?.("\u26a0", `All ${total} permits failed`);
+              onToast?.("⚠", `${failed} of ${total} permits failed`);
             }
-          } else {
-            addLog(`Job ${data.status}`, data.status === "complete" ? "success" : "error");
           }
         }
       } catch {
-        // Polling error — skip this tick
+        // skip this tick
       }
     }, 3000);
+
+    pollIntervalsRef.current[jobId] = interval;
+  }
+
+  async function handleCaptchaContinue() {
+    const jobId = activeJobIdRef.current;
+    if (!jobId) return;
+    try {
+      await signalCaptchaSolved(jobId);
+      setWaitingCaptcha(false);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleSubmitCart() {
+    if (cart.length === 0) return;
     pollingRef.current.set(jobId, intervalId);
   }
 
@@ -343,7 +399,6 @@ export default function OrderForm({ onToast }) {
               </select>
             </div>
 
-            {/* Effective Date */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
                 Effective Date
@@ -377,17 +432,13 @@ export default function OrderForm({ onToast }) {
                 Driver(s)
               </label>
 
-              {/* Selected driver chips */}
               {selectedDrivers.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {selectedDrivers.map((id) => {
                     const d = drivers.find((dr) => dr.id === id);
                     if (!d) return null;
                     return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1 bg-accent/15 border border-accent/30 text-accent-2 text-[11px] font-medium px-2 py-1 rounded-md"
-                      >
+                      <span key={id} className="inline-flex items-center gap-1 bg-accent/15 border border-accent/30 text-accent-2 text-[11px] font-medium px-2 py-1 rounded-md">
                         {d.name}
                         <button
                           onClick={() => removeDriver(id)}
@@ -406,22 +457,11 @@ export default function OrderForm({ onToast }) {
                 <p className="text-txt-3 text-[13px]">Loading drivers...</p>
               ) : (
                 <div className="relative">
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Type a name, tractor #, or ID..."
-                    disabled={busy}
-                  />
-
+                  <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type a name, tractor #, or ID..." disabled={busy} />
                   {searchResults.length > 0 && (
                     <div className="absolute z-10 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] max-h-60 overflow-y-auto">
                       {searchResults.slice(0, 20).map((driver) => (
-                        <button
-                          key={driver.id}
-                          onClick={() => addDriver(driver.id)}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-navy-3 transition-colors cursor-pointer bg-transparent border-none text-txt-1 font-sans"
-                        >
+                        <button key={driver.id} onClick={() => addDriver(driver.id)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-navy-3 transition-colors cursor-pointer bg-transparent border-none text-txt-1 font-sans">
                           <div className="w-6 h-6 rounded-full bg-steel flex items-center justify-center text-[9px] font-semibold text-accent-2 flex-shrink-0">
                             {(driver.name || "").substring(0, 2).toUpperCase()}
                           </div>
@@ -429,18 +469,10 @@ export default function OrderForm({ onToast }) {
                           <span className="ml-auto text-[11px] font-mono text-txt-3">{driver.tractor}</span>
                         </button>
                       ))}
-                      {searchResults.length > 20 && (
-                        <div className="px-3 py-2 text-[11px] text-txt-3 text-center border-t border-subtle">
-                          {searchResults.length - 20} more — refine your search
-                        </div>
-                      )}
                     </div>
                   )}
-
                   {search.trim() && searchResults.length === 0 && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg px-3 py-2.5 text-[13px] text-txt-3">
-                      No drivers found.
-                    </div>
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg px-3 py-2.5 text-[13px] text-txt-3">No drivers found.</div>
                   )}
                 </div>
               )}
@@ -564,7 +596,30 @@ export default function OrderForm({ onToast }) {
               </button>
             )}
 
-            <LogConsole messages={logMessages} />
+            {/* Re-queue last submitted batch */}
+            {lastBatch.length > 0 && (
+              <button
+                onClick={requeueLastBatch}
+                disabled={busy}
+                title="Re-add the last submitted batch to the queue"
+                className={`w-full py-2 rounded-lg text-[12px] font-medium transition-all font-sans border ${
+                  busy
+                    ? "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
+                    : "bg-navy-3 border-subtle2 text-txt-2 hover:border-accent/40 hover:text-accent-2 cursor-pointer"
+                }`}
+              >
+                {"\u21bb"} Re-queue last batch ({lastBatch.length})
+              </button>
+            )}
+
+            {waitingCaptcha && (
+              <button onClick={handleCaptchaContinue} className="w-full py-3 rounded-lg text-sm font-semibold transition-all font-sans border-none bg-[#e85d04] text-white hover:bg-[#d45303] cursor-pointer animate-pulse">
+                CAPTCHA Detected — Solve in Browser, Then Click Here to Continue
+              </button>
+            )}
+
+            {/* Job tracker replaces the old terminal log */}
+            <JobTracker jobs={jobs} onClear={() => setJobs([])} />
           </div>
         </div>
       </div>

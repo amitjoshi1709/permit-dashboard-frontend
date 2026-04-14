@@ -10,6 +10,7 @@ class PermitOrderRequest(BaseModel):
     permitType: str
     effectiveDate: Optional[str] = None  # null/empty for FL Flatbed (runner computes it)
     extraFields: Optional[dict] = None  # dynamic fields from backend form schema
+    effectiveTime: Optional[str] = "12:00"
 
 
 class CaptchaSolvedRequest(BaseModel):

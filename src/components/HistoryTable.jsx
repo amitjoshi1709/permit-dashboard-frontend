@@ -20,7 +20,7 @@ export default function HistoryTable() {
 
   useEffect(() => { load(); }, []);
 
-  let filtered = [...history].reverse();
+  let filtered = [...history];
   if (typeFilter !== "all") filtered = filtered.filter((p) => p.type === typeFilter);
   if (statusFilter !== "all") filtered = filtered.filter((p) => p.status === statusFilter);
 

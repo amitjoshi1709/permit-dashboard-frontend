@@ -96,11 +96,11 @@ MAKE_DISPLAY_MAP = {
 
 PERMIT_TYPE_MAP = {
     "trip":          ["ITP - IRP TRIP PERMIT"],
-    "fuel":          ["MFTP - MTTP PERMIT"],
-    "trip_fuel":     ["ITP - IRP TRIP PERMIT", "MFTP - MTTP PERMIT"],
-    "fuel_and_trip": ["ITP - IRP TRIP PERMIT", "MFTP - MTTP PERMIT"],
-    "fuel and trip": ["ITP - IRP TRIP PERMIT", "MFTP - MTTP PERMIT"],
-    "both":          ["ITP - IRP TRIP PERMIT", "MFTP - MTTP PERMIT"],
+    "fuel":          ["MFTP - MFTP PERMIT"],
+    "trip_fuel":     ["ITP - IRP TRIP PERMIT", "MFTP - MFTP PERMIT"],
+    "fuel_and_trip": ["ITP - IRP TRIP PERMIT", "MFTP - MFTP PERMIT"],
+    "fuel and trip": ["ITP - IRP TRIP PERMIT", "MFTP - MFTP PERMIT"],
+    "both":          ["ITP - IRP TRIP PERMIT", "MFTP - MFTP PERMIT"],
 }
 
 
@@ -234,6 +234,7 @@ def transform_permit(permit: dict, account_no: str = "82761") -> list[dict]:
             "account_no":            account_no,
             "permit_type":           portal_permit_type,
             "permit_eff_date":       iso_to_portal_date(permit["effectiveDate"]),
+            "permit_eff_time":       permit.get("effectiveTime", "12:00"),
 
             # Motor Carrier
             "safety_usdot":          d["usdot"],
