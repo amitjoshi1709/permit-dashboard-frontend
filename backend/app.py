@@ -138,7 +138,7 @@ def order_permits(body: PermitOrderRequest):
                     "state": state,
                     "permit_type": expanded_type,
                     "status": "Pending",
-                    "eff_date": body.effectiveDate,
+                    "eff_date": body.effectiveDate or "",
                     "fee": 0,
                 })
 
@@ -147,8 +147,8 @@ def order_permits(body: PermitOrderRequest):
                     "state": state,
                     "permitType": expanded_type,
                     "effectiveDate": body.effectiveDate or "",
-                "extraFields": body.extraFields,
                     "effectiveTime": body.effectiveTime or "12:00",
+                    "extraFields": body.extraFields,
                     "driver": {
                         "firstName": driver["firstName"],
                         "lastName": driver["lastName"],
@@ -157,7 +157,6 @@ def order_permits(body: PermitOrderRequest):
                         "tractor": driver["tractor"],
                         "year": driver.get("year"),
                         "make": driver.get("make", ""),
-                    "model": driver.get("model", ""),
                         "model": driver.get("model", ""),
                         "vin": driver.get("vin", ""),
                         "tagNumber": driver.get("tagNumber", ""),

@@ -129,8 +129,10 @@ def _fatal(page: Page, message: str):
 
 
 def _normalize(v: str) -> str:
-    """Strip whitespace and the ft/in quote chars so formatter rewrites don't trip equality."""
-    return (v or "").strip().replace("'", "").replace('"', "").replace(" ", "")
+    """Strip whitespace, commas, and the ft/in quote chars so formatter rewrites don't trip equality.
+    The FL portal's KO formatter adds commas to numeric fields (e.g. 15200 → '15,200')
+    and foot/inch symbols to dimensions. We strip all of these before comparing."""
+    return (v or "").strip().replace(",", "").replace("'", "").replace('"', "").replace(" ", "")
 
 
 def _safe_fill(page: Page, selector: str, value: str, field_name: str, strict: bool = False):
@@ -266,17 +268,32 @@ def _login(page: Page, username: str, password: str):
     page.locator('input[type="submit"], button[type="submit"]').first.click()
 
     try:
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
+        page.wait_for_load_state("domcontentloaded", timeout=30000)
     except PlaywrightTimeoutError:
         pass
-    page.wait_for_timeout(3000)
 
-    # Verify login succeeded
-    if "LogOn" in page.url or "Login" in page.url:
-        _fatal(page, "Login failed — still on login page. Check FL credentials.")
+    # Wait for the portal to fully transition away from the login page.
+    # The FL portal can be very slow after login — wait up to 45 seconds for
+    # the URL to stop containing "LogOn"/"Login".
+    for wait_pass in range(1, 16):
+        if "LogOn" not in page.url and "Login" not in page.url:
+            break
+        print(f"  [LOGIN-WAIT] Still on login page... ({wait_pass * 3}s)")
+        page.wait_for_timeout(3000)
+    else:
+        _fatal(page, "Login failed — still on login page after 45s. Check FL credentials or portal may be down.")
 
     _screenshot(page, "login_success")
     print("[OK] Login successful")
+
+    # Wait for the post-login dashboard to fully render before proceeding.
+    # The FL portal can take several seconds after the URL changes before the
+    # main page content (e.g., "Create Application" link) is actually present.
+    print("  [POST-LOGIN] Waiting for dashboard to stabilize...")
+    page.wait_for_load_state("networkidle", timeout=30000)
+    page.wait_for_timeout(3000)
+    _screenshot(page, "post_login_dashboard")
+    print("  [POST-LOGIN] Dashboard ready")
 
 
 # ---------------------------------------------------------------------------
@@ -287,16 +304,30 @@ def _create_application(page: Page):
     """Click Create Application to start a new permit."""
     print("\n[ACT] Clicking Create Application...")
 
-    # Look for a Create Application button/link
+    # The dashboard may still be loading — retry finding the button for up to 30s.
+    create_btn = None
+    for attempt in range(1, 11):
+        try:
+            btn = page.get_by_role("link", name="Create Application")
+            if btn.count() == 0:
+                btn = page.get_by_role("button", name="Create Application")
+            if btn.count() == 0:
+                btn = page.locator("a:has-text('Create Application'), button:has-text('Create Application')")
+            if btn.count() > 0:
+                create_btn = btn
+                break
+        except Exception:
+            pass
+        print(f"  [CREATE-APP] Button not found yet... ({attempt * 3}s)")
+        page.wait_for_timeout(3000)
+
+    if not create_btn:
+        _fatal(page, "Could not find Create Application button after 30s")
+
     try:
-        create_btn = page.get_by_role("link", name="Create Application")
-        if create_btn.count() == 0:
-            create_btn = page.get_by_role("button", name="Create Application")
-        if create_btn.count() == 0:
-            create_btn = page.locator("a:has-text('Create Application'), button:has-text('Create Application')")
         create_btn.first.click(timeout=10000)
     except Exception as e:
-        _fatal(page, f"Could not find/click Create Application: {e}")
+        _fatal(page, f"Could not click Create Application: {e}")
 
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(3000)

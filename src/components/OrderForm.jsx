@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, signalCaptchaSolved } from "../api";
-import JobTracker from "./JobTracker";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, fetchFormFields } from "../api";
+import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, fetchFormFields, signalCaptchaSolved } from "../api";
 import LogConsole from "./LogConsole";
 import DynamicFields from "./DynamicFields";
+import JobTracker from "./JobTracker";
 
 function ts() {
   const d = new Date();
@@ -42,6 +40,7 @@ export default function OrderForm({ onToast }) {
 
   // --- Job tracking (replaces log messages) ---
   const [jobs, setJobs] = useState([]);
+  const [logMessages, setLogMessages] = useState([]);
   const pollIntervalsRef = useRef({});
   const activeJobIdRef = useRef(null);
 
@@ -313,7 +312,9 @@ export default function OrderForm({ onToast }) {
     // Each queue entry becomes its own batch of (driverIds x [state])
     // We submit them sequentially so each gets its own jobId
     for (const entry of queue) {
-      const totalPermits = entry.driverIds.length * (entry.permitType === "trip_fuel" ? 2 : 1);
+      // Only GA splits trip_fuel into 2 separate permits; other states (AL) handle it as 1.
+      const splitFactor = (entry.permitType === "trip_fuel" && entry.state === "GA") ? 2 : 1;
+      const totalPermits = entry.driverIds.length * splitFactor;
       addLog(`Submitting ${entry.driverIds.length} driver(s) · ${entry.stateLabel} · ${entry.permitTypeLabel} · ${totalPermits} permit(s)...`, "info");
 
       try {
@@ -343,7 +344,10 @@ export default function OrderForm({ onToast }) {
   const canAddToQueue = !!selectedState && !!permitType && selectedDrivers.length > 0 && !busy;
 
   // Count total permits across queue
-  const queuePermitCount = queue.reduce((sum, e) => sum + e.driverIds.length * (e.permitType === "trip_fuel" ? 2 : 1), 0);
+  const queuePermitCount = queue.reduce((sum, e) => {
+    const splitFactor = (e.permitType === "trip_fuel" && e.state === "GA") ? 2 : 1;
+    return sum + e.driverIds.length * splitFactor;
+  }, 0);
 
   return (
     <div className="bg-navy-2 border border-subtle rounded-[14px]">
@@ -579,22 +583,6 @@ export default function OrderForm({ onToast }) {
             <div className="text-[11px] text-txt-3 text-center -mt-2">
               Each queued request will be processed as a separate job.
             </div>
-
-            {/* Re-queue last submitted batch */}
-            {lastBatch.length > 0 && (
-              <button
-                onClick={requeueLastBatch}
-                disabled={busy}
-                title="Re-add the last submitted batch to the queue"
-                className={`w-full py-2 rounded-lg text-[12px] font-medium transition-all font-sans border ${
-                  busy
-                    ? "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
-                    : "bg-navy-3 border-subtle2 text-txt-2 hover:border-accent/40 hover:text-accent-2 cursor-pointer"
-                }`}
-              >
-                {"\u21bb"} Re-queue last batch ({lastBatch.length})
-              </button>
-            )}
 
             {/* Re-queue last submitted batch */}
             {lastBatch.length > 0 && (
