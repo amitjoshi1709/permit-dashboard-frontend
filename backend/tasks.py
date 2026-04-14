@@ -23,16 +23,38 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 # ── Script Registry ──────────────────────────────────────────────────
 
 from config import COMPANY
-from scripts.alabama.runner import run as run_alabama
-from scripts.georgia.runner import run as run_georgia
+from scripts.alabama_tf.runner import run as run_alabama_tf
+from scripts.alabama_osow.runner import run as run_alabama_osow
+from scripts.georgia_tf.runner import run as run_georgia_tf
+from scripts.arkansas_trip.runner import run as run_arkansas_trip
+from scripts.georgia_osow.runner import run as run_georgia_osow
+from scripts.florida_trip.runner import run as run_florida_trip
 
+# Registry key: (state, permitType) for state+type-specific runners.
+# Fallback: (state, None) matches any permit type for that state.
 SCRIPT_REGISTRY = {
-    "AL": run_alabama,
-    "GA": run_georgia,
-    # "FL": run_florida,
-    # "TX": run_texas,
+    ("AL", "trip_fuel"): run_alabama_tf,
+    ("AL", "trip"):      run_alabama_tf,
+    ("AL", "fuel"):      run_alabama_tf,
+    ("AL", "os_ow"):     run_alabama_osow,
+    ("GA", "trip_fuel"):  run_georgia_tf,
+    ("GA", "trip"):       run_georgia_tf,
+    ("GA", "fuel"):       run_georgia_tf,
+    ("GA", "os_ow"):      run_georgia_osow,
+    ("AR", None):         run_arkansas_trip,
+    ("FL", "trip"):                    run_florida_trip,
+    ("FL", "fuel"):                    run_florida_trip,
+    ("FL", "trip_fuel"):               run_florida_trip,
+    ("FL", "fl_blanket_bulk"):         run_florida_trip,
+    ("FL", "fl_blanket_inner_bridge"): run_florida_trip,
+    ("FL", "fl_blanket_flatbed"):      run_florida_trip,
     # ...add new states here
 }
+
+
+def _get_runner(state: str, permit_type: str):
+    """Look up runner by (state, permitType), falling back to (state, None)."""
+    return SCRIPT_REGISTRY.get((state, permit_type)) or SCRIPT_REGISTRY.get((state, None))
 
 
 # ── Redis helpers ────────────────────────────────────────────────────
@@ -133,16 +155,17 @@ def run_permit_job(self, job_id: str, permits: list):
 
     for permit in permits:
         state = permit["state"]
-        runner = SCRIPT_REGISTRY.get(state)
+        permit_type = permit.get("permitType", "")
+        runner = _get_runner(state, permit_type)
 
         if not runner:
             results.append({
                 "permitId": permit["permitId"],
                 "driverName": f"{permit['driver']['firstName']} {permit['driver']['lastName']}",
                 "tractor": permit["driver"]["tractor"],
-                "permitType": permit.get("permitType", ""),
+                "permitType": permit_type,
                 "status": "error",
-                "message": f"No automation script for state {state}",
+                "message": f"No automation script for state {state} / {permit_type}",
             })
             set_job_status(job_id, "processing", results)
             continue

@@ -15,13 +15,14 @@ from database import (
     create_driver_record,
     update_driver_record,
     soft_delete_driver,
-    generate_permit_id,
+    generate_permit_ids,
     insert_permits,
     update_permit_status,
     get_permit_history,
 )
 from tasks import run_permit_job, get_job_status, signal_captcha_solved
 from config import SUPPORTED_STATES, VALID_PERMIT_TYPES, COMPANY_TYPES, COMPANY_DRIVER_DEFAULTS
+from form_fields import get_merged_fields
 
 app = FastAPI(title="Mega Trucking Permit API")
 
@@ -84,9 +85,15 @@ def order_permits(body: PermitOrderRequest):
     permits = []
     permit_rows = []
 
+    # Pre-generate all permit IDs in one query to avoid duplicates
+    total_permits = len(drivers) * len(body.states)
+    permit_ids = generate_permit_ids(total_permits)
+    id_index = 0
+
     for driver in drivers:
         for state in body.states:
-            permit_id = generate_permit_id()
+            permit_id = permit_ids[id_index]
+            id_index += 1
             driver_name = f"{driver['lastName']}, {driver['firstName']}"
 
             # Build insurance object
@@ -117,7 +124,7 @@ def order_permits(body: PermitOrderRequest):
                 "state": state,
                 "permit_type": body.permitType,
                 "status": "Pending",
-                "eff_date": body.effectiveDate,
+                "eff_date": body.effectiveDate or "",
                 "fee": 0,
             })
 
@@ -125,7 +132,8 @@ def order_permits(body: PermitOrderRequest):
                 "permitId": permit_id,
                 "state": state,
                 "permitType": body.permitType,
-                "effectiveDate": body.effectiveDate,
+                "effectiveDate": body.effectiveDate or "",
+                "extraFields": body.extraFields,
                 "driver": {
                     "firstName": driver["firstName"],
                     "lastName": driver["lastName"],
@@ -134,6 +142,7 @@ def order_permits(body: PermitOrderRequest):
                     "tractor": driver["tractor"],
                     "year": driver.get("year"),
                     "make": driver.get("make", ""),
+                    "model": driver.get("model", ""),
                     "vin": driver.get("vin", ""),
                     "tagNumber": driver.get("tagNumber", ""),
                     "tagState": driver.get("tagState", ""),
@@ -182,6 +191,13 @@ def captcha_solved(job_id: str, permit_id: str = ""):
 @app.get("/api/permits/history")
 def permit_history():
     return get_permit_history()
+
+
+@app.get("/api/permits/form-fields")
+def get_form_fields(states: str, permitType: str):
+    """Return dynamic field schema for the given states + permit type."""
+    state_list = [s.strip() for s in states.split(",") if s.strip()]
+    return {"fields": get_merged_fields(state_list, permitType)}
 
 
 @app.get("/api/permits/blankets")

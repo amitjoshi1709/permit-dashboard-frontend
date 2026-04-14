@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus } from "../api";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { STATES, PERMIT_TYPES, fetchDrivers, submitPermitOrder, fetchJobStatus, fetchFormFields } from "../api";
 import LogConsole from "./LogConsole";
+import DynamicFields from "./DynamicFields";
 
 function ts() {
   const d = new Date();
@@ -10,17 +11,34 @@ function ts() {
 }
 
 export default function OrderForm({ onToast }) {
-  const [selectedStates, setSelectedStates] = useState([]);
-  const [selectedDrivers, setSelectedDrivers] = useState([]);
+  // ── Form fields (one permit at a time) ──
+  const [selectedState, setSelectedState] = useState("");
   const [permitType, setPermitType] = useState("");
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [selectedDrivers, setSelectedDrivers] = useState([]);
+
+  // Dynamic form fields (driven by backend schema)
+  const [formFields, setFormFields] = useState([]);
+  const [extraValues, setExtraValues] = useState({});
+
+  // ── Queue ──
+  const [queue, setQueue] = useState([]);
+  // Snapshot of the most recently submitted batch — lets you re-queue the same
+  // set of permits with one click if a run fails (no need to re-enter data).
+  const [lastBatch, setLastBatch] = useState([]);
+
+  // ── Drivers ──
   const [drivers, setDrivers] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // ── Job processing ──
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logMessages, setLogMessages] = useState([]);
-  const pollingRef = useRef(null);
+  // Map<jobId, intervalId> so multiple queued jobs each get their own interval
+  // and each one is cleared independently when its job completes.
+  const pollingRef = useRef(new Map());
   const seenResultsRef = useRef(new Set());
 
   useEffect(() => {
@@ -33,13 +51,46 @@ export default function OrderForm({ onToast }) {
         setDrivers([]);
         setLoading(false);
       });
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+    return () => {
+      for (const id of pollingRef.current.values()) clearInterval(id);
+      pollingRef.current.clear();
+    };
   }, []);
 
-  function toggleState(code) {
-    setSelectedStates((prev) =>
-      prev.includes(code) ? prev.filter((s) => s !== code) : [...prev, code]
-    );
+  // Permit types available for the currently selected state.
+  // FL-only types (`fl_*`) are hidden unless Florida is selected.
+  const availablePermitTypes = useMemo(() => {
+    const isFL = selectedState === "FL";
+    return PERMIT_TYPES.filter((pt) => !pt.value.startsWith("fl_") || isFL);
+  }, [selectedState]);
+
+  // Reset stale permit type selection when state changes
+  useEffect(() => {
+    if (permitType && !availablePermitTypes.find((pt) => pt.value === permitType)) {
+      setPermitType("");
+    }
+  }, [availablePermitTypes, permitType]);
+
+  // Flatbed requires a reminder that travel begin date must be 2 work days out
+  const isFlatbed = permitType === "fl_blanket_flatbed";
+
+  // Fetch dynamic form fields when state or permit type changes
+  useEffect(() => {
+    if (selectedState && permitType) {
+      fetchFormFields([selectedState], permitType)
+        .then((fields) => {
+          setFormFields(fields);
+          setExtraValues({});
+        })
+        .catch(() => setFormFields([]));
+    } else {
+      setFormFields([]);
+      setExtraValues({});
+    }
+  }, [selectedState, permitType]);
+
+  function handleExtraFieldChange(key, value) {
+    setExtraValues((prev) => ({ ...prev, [key]: value }));
   }
 
   function addDriver(id) {
@@ -64,19 +115,74 @@ export default function OrderForm({ onToast }) {
       })
     : [];
 
+  // ── Add to queue ──
+  function addToQueue() {
+    if (!selectedState || !permitType || selectedDrivers.length === 0) return;
+
+    const stateObj = STATES.find((s) => s.code === selectedState);
+    const typeObj = PERMIT_TYPES.find((t) => t.value === permitType);
+
+    const entry = {
+      id: Date.now(),
+      state: selectedState,
+      stateLabel: stateObj?.label || selectedState,
+      permitType,
+      permitTypeLabel: typeObj?.label || permitType,
+      effectiveDate,
+      driverIds: [...selectedDrivers],
+      driverNames: selectedDrivers.map((id) => {
+        const d = drivers.find((dr) => dr.id === id);
+        return d ? d.name : `#${id}`;
+      }),
+      extraFields: Object.keys(extraValues).length > 0 ? { ...extraValues } : null,
+    };
+
+    setQueue((prev) => [...prev, entry]);
+
+    // Reset form for next entry (keep date)
+    setSelectedState("");
+    setPermitType("");
+    setSelectedDrivers([]);
+    setFormFields([]);
+    setExtraValues({});
+    setSearch("");
+  }
+
+  function removeFromQueue(id) {
+    setQueue((prev) => prev.filter((q) => q.id !== id));
+  }
+
+  // Clone an existing queue entry (same state, type, date, drivers, extraFields)
+  // so you can re-queue the same config without re-typing dimensions/axles/etc.
+  function duplicateQueueEntry(id) {
+    setQueue((prev) => {
+      const src = prev.find((q) => q.id === id);
+      if (!src) return prev;
+      const clone = {
+        ...src,
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        driverIds: [...src.driverIds],
+        driverNames: [...src.driverNames],
+        extraFields: src.extraFields ? { ...src.extraFields } : null,
+      };
+      return [...prev, clone];
+    });
+  }
+
+  // ── Submit entire queue ──
   const addLog = useCallback((text, status) => {
     setLogMessages((prev) => [...prev, { timestamp: ts(), text, status }]);
   }, []);
 
   function startPolling(jobId) {
-    seenResultsRef.current = new Set();
+    // Don't double-poll the same job
+    if (pollingRef.current.has(jobId)) return;
     setProcessing(true);
 
-    pollingRef.current = setInterval(async () => {
+    const intervalId = setInterval(async () => {
       try {
         const data = await fetchJobStatus(jobId);
 
-        // Log new results as they arrive
         if (data.results) {
           for (const r of data.results) {
             const key = `${r.permitId}-${r.status}`;
@@ -93,74 +199,95 @@ export default function OrderForm({ onToast }) {
           }
         }
 
-        // Job finished
         if (data.status === "complete" || data.status === "failed") {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-          setProcessing(false);
+          const thisInterval = pollingRef.current.get(jobId);
+          if (thisInterval) clearInterval(thisInterval);
+          pollingRef.current.delete(jobId);
+          if (pollingRef.current.size === 0) setProcessing(false);
 
           if (data.summary) {
             const { total, succeeded, failed } = data.summary;
             addLog(`Job complete: ${succeeded} of ${total} permits succeeded${failed > 0 ? `, ${failed} failed` : ""}`, failed === 0 ? "success" : "error");
 
             if (failed === 0) {
-              onToast?.("✓", `All ${succeeded} permits completed successfully`);
+              onToast?.("\u2713", `All ${succeeded} permits completed successfully`);
             } else if (succeeded > 0) {
-              onToast?.("⚠", `${failed} of ${total} permits failed`);
+              onToast?.("\u26a0", `${failed} of ${total} permits failed`);
             } else {
-              onToast?.("⚠", `All ${total} permits failed`);
+              onToast?.("\u26a0", `All ${total} permits failed`);
             }
           } else {
             addLog(`Job ${data.status}`, data.status === "complete" ? "success" : "error");
           }
         }
       } catch {
-        // Polling error — don't stop, just skip this tick
+        // Polling error — skip this tick
       }
     }, 3000);
+    pollingRef.current.set(jobId, intervalId);
   }
 
-  async function handleSubmit() {
-    if (selectedDrivers.length === 0 || selectedStates.length === 0 || !permitType) return;
+  // Re-queue the most recently submitted batch (useful when a run fails and
+  // you want to retry the exact same set without re-entering data).
+  function requeueLastBatch() {
+    if (lastBatch.length === 0) return;
+    const stamp = Date.now();
+    const clones = lastBatch.map((e, i) => ({
+      ...e,
+      id: stamp + i,
+      driverIds: [...e.driverIds],
+      driverNames: [...e.driverNames],
+      extraFields: e.extraFields ? { ...e.extraFields } : null,
+    }));
+    setQueue((prev) => [...prev, ...clones]);
+  }
+
+  async function handleSubmitQueue() {
+    if (queue.length === 0) return;
     setSubmitting(true);
+    // Snapshot for re-queue — deep-copy so later mutations can't affect it.
+    setLastBatch(queue.map((e) => ({
+      ...e,
+      driverIds: [...e.driverIds],
+      driverNames: [...e.driverNames],
+      extraFields: e.extraFields ? { ...e.extraFields } : null,
+    })));
 
-    const stateLabel = selectedStates.join(", ");
-    const typeLabel = PERMIT_TYPES.find((t) => t.value === permitType)?.label || permitType;
-    const permitCount = selectedDrivers.length * selectedStates.length * (permitType === "trip_fuel" ? 2 : 1);
+    // Group queue entries into a single API call
+    // Each queue entry becomes its own batch of (driverIds x [state])
+    // We submit them sequentially so each gets its own jobId
+    for (const entry of queue) {
+      const totalPermits = entry.driverIds.length * (entry.permitType === "trip_fuel" ? 2 : 1);
+      addLog(`Submitting ${entry.driverIds.length} driver(s) · ${entry.stateLabel} · ${entry.permitTypeLabel} · ${totalPermits} permit(s)...`, "info");
 
-    addLog(`Submitting ${selectedDrivers.length} driver(s) × ${selectedStates.length} state(s) · ${typeLabel} · ${permitCount} total permit(s) for ${stateLabel}...`, "info");
+      try {
+        const orderPayload = {
+          driverIds: entry.driverIds,
+          states: [entry.state],
+          permitType: entry.permitType,
+          effectiveDate: entry.effectiveDate,
+        };
+        if (entry.extraFields) {
+          orderPayload.extraFields = entry.extraFields;
+        }
 
-    try {
-      const result = await submitPermitOrder({
-        driverIds: selectedDrivers,
-        states: selectedStates,
-        permitType,
-        effectiveDate,
-      });
-
-      addLog(`${result.jobId} queued — processing ${permitCount} permit(s)...`, "info");
-
-      setSelectedDrivers([]);
-      setSelectedStates([]);
-      setPermitType("");
-      setEffectiveDate(new Date().toISOString().split("T")[0]);
-      setSearch("");
-      setSubmitting(false);
-
-      // Start polling for job progress
-      startPolling(result.jobId);
-    } catch {
-      addLog("Error submitting permits. Please try again.", "error");
-      onToast?.("⚠", "Failed to submit permits");
-      setSubmitting(false);
+        const result = await submitPermitOrder(orderPayload);
+        addLog(`${result.jobId} queued — processing ${totalPermits} permit(s)...`, "info");
+        startPolling(result.jobId);
+      } catch {
+        addLog(`Error submitting ${entry.stateLabel} · ${entry.permitTypeLabel}`, "error");
+      }
     }
+
+    setQueue([]);
+    setSubmitting(false);
   }
 
   const busy = submitting || processing;
-  const canSubmit = selectedDrivers.length > 0 && selectedStates.length > 0 && !!permitType && !busy;
-  const count = selectedDrivers.length * selectedStates.length;
-  const stateLabel = selectedStates.length > 0 ? selectedStates.join(", ") : "...";
-  const totalPermits = count * (permitType === "trip_fuel" ? 2 : 1);
+  const canAddToQueue = !!selectedState && !!permitType && selectedDrivers.length > 0 && !busy;
+
+  // Count total permits across queue
+  const queuePermitCount = queue.reduce((sum, e) => sum + e.driverIds.length * (e.permitType === "trip_fuel" ? 2 : 1), 0);
 
   return (
     <div className="bg-navy-2 border border-subtle rounded-[14px]">
@@ -171,12 +298,34 @@ export default function OrderForm({ onToast }) {
             Processing...
           </span>
         )}
+        {queue.length > 0 && !processing && (
+          <span className="text-[11px] text-accent-2 bg-accent/10 rounded-md px-2 py-0.5">
+            {queue.length} in queue
+          </span>
+        )}
       </div>
 
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left column */}
+          {/* Left column — form */}
           <div className="space-y-5">
+            {/* State selector — single dropdown */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                State
+              </label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">-- Select state --</option>
+                {STATES.map((st) => (
+                  <option key={st.code} value={st.code}>{st.code} — {st.label}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Permit Type */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
@@ -187,16 +336,11 @@ export default function OrderForm({ onToast }) {
                 onChange={(e) => setPermitType(e.target.value)}
                 disabled={busy}
               >
-                <option value="">— Select permit type —</option>
-                {PERMIT_TYPES.map((t) => (
+                <option value="">-- Select permit type --</option>
+                {availablePermitTypes.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
-              {permitType === "trip_fuel" && count > 0 && (
-                <div className="text-[11px] text-txt-3 mt-1">
-                  Trip and Fuel creates 2 permits per driver — {totalPermits} total
-                </div>
-              )}
             </div>
 
             {/* Effective Date */}
@@ -210,51 +354,27 @@ export default function OrderForm({ onToast }) {
                 onChange={(e) => setEffectiveDate(e.target.value)}
                 disabled={busy}
               />
+              {isFlatbed && (
+                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166]">
+                  {"\u26a0"} Reminder: travel begin date must be <strong>2 WORK DAYS LATER</strong> than submission.
+                </div>
+              )}
             </div>
 
-            {/* State selector */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
-                Select State(s)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {STATES.map((st) => (
-                  <button
-                    key={st.code}
-                    onClick={() => toggleState(st.code)}
-                    disabled={busy}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs border transition-colors ${
-                      busy
-                        ? "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed opacity-50"
-                        : selectedStates.includes(st.code)
-                        ? "bg-accent/15 border-accent/40 text-accent-2 font-medium cursor-pointer"
-                        : "bg-navy-3 border-subtle text-txt-2 hover:border-subtle2 hover:text-txt-1 cursor-pointer"
-                    }`}
-                  >
-                    <span className={`text-[11px] font-bold w-[22px] text-center ${
-                      selectedStates.includes(st.code) ? "text-accent-2" : "text-accent"
-                    }`}>
-                      {st.code}
-                    </span>
-                    <span className="flex-1 text-left">{st.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Dynamic extra fields — driven by backend schema */}
+            {formFields.length > 0 && (
+              <DynamicFields
+                fields={formFields}
+                values={extraValues}
+                onChange={handleExtraFieldChange}
+                disabled={busy}
+              />
+            )}
 
-            {/* Payment boundary notice */}
-            <div className="rounded-lg px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-2">
-              <span className="text-sm flex-shrink-0 mt-px">⚠</span>
-              <span>Automation stops before payment. You will complete checkout manually.</span>
-            </div>
-          </div>
-
-          {/* Right column */}
-          <div className="space-y-5">
             {/* Driver search */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
-                Search Drivers
+                Driver(s)
               </label>
 
               {/* Selected driver chips */}
@@ -274,7 +394,7 @@ export default function OrderForm({ onToast }) {
                           disabled={busy}
                           className="hover:text-white transition-colors cursor-pointer leading-none bg-transparent border-none text-accent-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          ×
+                          x
                         </button>
                       </span>
                     );
@@ -326,12 +446,91 @@ export default function OrderForm({ onToast }) {
               )}
             </div>
 
-            {/* Submit */}
+            {/* Add to Queue button */}
             <button
-              disabled={!canSubmit}
-              onClick={handleSubmit}
+              disabled={!canAddToQueue}
+              onClick={addToQueue}
+              className={`w-full py-2.5 rounded-lg text-[13px] font-medium transition-all font-sans border ${
+                canAddToQueue
+                  ? "bg-accent/10 border-accent/40 text-accent-2 hover:bg-accent/20 cursor-pointer"
+                  : "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
+              }`}
+            >
+              + Add to Queue
+            </button>
+
+            {/* Payment boundary notice */}
+            <div className="rounded-lg px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-2">
+              <span className="text-sm flex-shrink-0 mt-px">{"\u26a0"}</span>
+              <span>Automation stops before payment. You will complete checkout manually.</span>
+            </div>
+          </div>
+
+          {/* Right column — queue + submit + log */}
+          <div className="space-y-5">
+            {/* Queue list */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                Permit Queue {queue.length > 0 && `(${queue.length})`}
+              </label>
+
+              {queue.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-subtle px-4 py-8 text-center">
+                  <div className="text-txt-3 text-[12px]">No permits queued yet.</div>
+                  <div className="text-txt-3 text-[11px] mt-1 opacity-60">Fill out the form and click "Add to Queue"</div>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {queue.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-navy-3 border border-subtle group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[11px] font-bold text-accent-2">{entry.state}</span>
+                          <span className="text-[11px] text-txt-2 font-medium">{entry.permitTypeLabel}</span>
+                          <span className="text-[10px] text-txt-3">{entry.effectiveDate}</span>
+                        </div>
+                        <div className="text-[11px] text-txt-3 truncate">
+                          {entry.driverNames.join(", ")}
+                        </div>
+                        {entry.extraFields && (
+                          <div className="text-[10px] text-txt-3 opacity-60 mt-0.5">
+                            + extra fields attached
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => duplicateQueueEntry(entry.id)}
+                          disabled={busy}
+                          title="Duplicate this entry"
+                          className="text-txt-3 hover:text-accent-2 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          ⧉
+                        </button>
+                        <button
+                          onClick={() => removeFromQueue(entry.id)}
+                          disabled={busy}
+                          title="Remove from queue"
+                          className="text-txt-3 hover:text-red-400 text-sm bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          x
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Submit Queue */}
+            <button
+              disabled={queue.length === 0 || busy}
+              onClick={handleSubmitQueue}
               className={`w-full py-3 rounded-lg text-sm font-medium transition-all font-sans border-none ${
-                canSubmit
+                queue.length > 0 && !busy
                   ? "bg-accent text-white hover:bg-accent-2 cursor-pointer hover:-translate-y-px"
                   : "bg-navy-3 text-txt-3 cursor-not-allowed"
               }`}
@@ -340,12 +539,30 @@ export default function OrderForm({ onToast }) {
                 ? "Submitting..."
                 : processing
                 ? "Processing — please wait..."
-                : `Queue ${count || "..."} permit(s) → ${stateLabel}`}
+                : queue.length > 0
+                ? `Submit ${queue.length} request(s) — ${queuePermitCount} permit(s)`
+                : "Queue is empty"}
             </button>
 
             <div className="text-[11px] text-txt-3 text-center -mt-2">
-              This will queue the permit on the portal. Payment is a separate step.
+              Each queued request will be processed as a separate job.
             </div>
+
+            {/* Re-queue last submitted batch */}
+            {lastBatch.length > 0 && (
+              <button
+                onClick={requeueLastBatch}
+                disabled={busy}
+                title="Re-add the last submitted batch to the queue"
+                className={`w-full py-2 rounded-lg text-[12px] font-medium transition-all font-sans border ${
+                  busy
+                    ? "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
+                    : "bg-navy-3 border-subtle2 text-txt-2 hover:border-accent/40 hover:text-accent-2 cursor-pointer"
+                }`}
+              >
+                {"\u21bb"} Re-queue last batch ({lastBatch.length})
+              </button>
+            )}
 
             <LogConsole messages={logMessages} />
           </div>

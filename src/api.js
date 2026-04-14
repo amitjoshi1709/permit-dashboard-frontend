@@ -11,6 +11,7 @@ export const STATES = [
   { code: "MS", label: "Mississippi" },
   { code: "LA", label: "Louisiana" },
   { code: "TX", label: "Texas" },
+  { code: "AR", label: "Arkansas" },
 ];
 
 // ── Permit types ──────────────────────────────────────────────────────
@@ -19,6 +20,10 @@ export const PERMIT_TYPES = [
   { value: "os_ow", label: "OS/OW" },
   { value: "trip", label: "Trip" },
   { value: "fuel", label: "Fuel" },
+  // Florida-only blanket variants — gated to FL in OrderForm
+  { value: "fl_blanket_bulk",         label: "FL Blanket Bulk" },
+  { value: "fl_blanket_inner_bridge", label: "FL Blanket Inner Bridge" },
+  { value: "fl_blanket_flatbed",      label: "FL Blanket Flatbed" },
 ];
 
 // ── Driver type constants ─────────────────────────────────────────────
@@ -48,11 +53,19 @@ export async function fetchDrivers() {
   return res.json();
 }
 
-export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate }) {
+export async function fetchFormFields(states, permitType) {
+  const res = await fetch(`${API_BASE}/api/permits/form-fields?states=${states.join(",")}&permitType=${permitType}`);
+  const data = await res.json();
+  return data.fields || [];
+}
+
+export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate, extraFields }) {
+  const payload = { driverIds, states, permitType, effectiveDate };
+  if (extraFields && Object.keys(extraFields).length > 0) payload.extraFields = extraFields;
   const res = await fetch(`${API_BASE}/api/permits/order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ driverIds, states, permitType, effectiveDate }),
+    body: JSON.stringify(payload),
   });
   return res.json();
 }

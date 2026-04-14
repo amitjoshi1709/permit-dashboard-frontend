@@ -8,7 +8,8 @@ class PermitOrderRequest(BaseModel):
     driverIds: list[int]
     states: list[str]
     permitType: str
-    effectiveDate: str
+    effectiveDate: Optional[str] = None  # null/empty for FL Flatbed (runner computes it)
+    extraFields: Optional[dict] = None  # dynamic fields from backend form schema
 
 
 class CaptchaSolvedRequest(BaseModel):

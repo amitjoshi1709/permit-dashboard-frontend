@@ -18,6 +18,7 @@ COMPANY = {
     "zip": "33014",
     "county": "MIAMI-DADE",
     "country": "USA",
+    "phone": "786-332-5691",
 }
 
 # Company driver defaults (F, LP, T types)
@@ -31,8 +32,12 @@ COMPANY_DRIVER_DEFAULTS = {
 
 COMPANY_TYPES = {"F", "LP", "T"}
 
-SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX"}
-VALID_PERMIT_TYPES = {"trip_fuel", "os_ow", "trip", "fuel"}
+SUPPORTED_STATES = {"GA", "FL", "SC", "NC", "TN", "AL", "MS", "LA", "TX", "AR"}
+VALID_PERMIT_TYPES = {
+    "trip_fuel", "os_ow", "trip", "fuel",
+    # Florida-only blanket variants
+    "fl_blanket_bulk", "fl_blanket_inner_bridge", "fl_blanket_flatbed",
+}
 
 # Georgia portal config
 # Credentials come from env vars: GA_PORTAL_USERNAME, GA_PORTAL_PASSWORD
