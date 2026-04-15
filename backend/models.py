@@ -4,6 +4,18 @@ from typing import Optional
 
 # ── Request Models ───────────────────────────────────────────────────
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class MegaInsuranceRequest(BaseModel):
+    insuranceCompany: Optional[str] = None
+    insuranceEffective: Optional[str] = None
+    insuranceExpiration: Optional[str] = None
+    policyNumber: Optional[str] = None
+
+
 class PermitOrderRequest(BaseModel):
     driverIds: list[int]
     states: list[str]

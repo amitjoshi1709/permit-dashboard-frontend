@@ -119,6 +119,88 @@ def soft_delete_driver(driver_id: int) -> bool:
     return len(result.data) > 0
 
 
+def _normalize_date_for_supabase(value: str) -> str:
+    """Convert MM/DD/YYYY → YYYY-MM-DD. Passes through if already ISO or blank."""
+    if not value:
+        return value
+    v = value.strip()
+    # Already ISO (YYYY-MM-DD)
+    if len(v) == 10 and v[4] == "-" and v[7] == "-":
+        return v
+    # MM/DD/YYYY → YYYY-MM-DD
+    if "/" in v:
+        parts = v.split("/")
+        if len(parts) == 3:
+            m, d, y = parts
+            return f"{y.zfill(4)}-{m.zfill(2)}-{d.zfill(2)}"
+    return v
+
+
+def update_mega_insurance(insurance: dict) -> int:
+    """
+    Update insurance fields on every Mega driver (driverType in F, LP, T).
+    Returns the number of rows updated.
+
+    `insurance` dict uses camelCase keys — same shape as the driver object:
+      insuranceCompany, insuranceEffective, insuranceExpiration, policyNumber
+    """
+    # Drop empty strings/None so we don't try to write "" into date columns
+    cleaned = {k: v for k, v in insurance.items() if v not in (None, "")}
+    # Normalize dates to ISO for PostgreSQL date columns
+    if "insuranceEffective" in cleaned:
+        cleaned["insuranceEffective"] = _normalize_date_for_supabase(cleaned["insuranceEffective"])
+    if "insuranceExpiration" in cleaned:
+        cleaned["insuranceExpiration"] = _normalize_date_for_supabase(cleaned["insuranceExpiration"])
+    row = driver_to_row(cleaned)
+    if not row:
+        return 0
+    result = (
+        supabase.table("fleet")
+        .update(row)
+        .in_("Driver Type", ["F", "LP", "T"])
+        .execute()
+    )
+    return len(result.data)
+
+
+def _iso_to_mmddyyyy(value: str) -> str:
+    """Convert YYYY-MM-DD → MM/DD/YYYY for display. Passes through otherwise."""
+    if not value:
+        return value
+    v = str(value).strip()
+    if len(v) == 10 and v[4] == "-" and v[7] == "-":
+        y, m, d = v.split("-")
+        return f"{m}/{d}/{y}"
+    return v
+
+
+def get_mega_insurance() -> dict:
+    """Fetch the current Mega insurance (reads from any F/LP/T row)."""
+    # Supabase strips spaces inside the select string for aliasing, which
+    # breaks our column names. Select * and extract the fields in Python.
+    result = (
+        supabase.table("fleet")
+        .select("*")
+        .in_("Driver Type", ["F", "LP", "T"])
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return {
+            "insuranceCompany": "",
+            "insuranceEffective": "",
+            "insuranceExpiration": "",
+            "policyNumber": "",
+        }
+    row = result.data[0]
+    return {
+        "insuranceCompany": row.get("Insurance Company", "") or "",
+        "insuranceEffective": _iso_to_mmddyyyy(row.get("Insurance Effective Date", "") or ""),
+        "insuranceExpiration": _iso_to_mmddyyyy(row.get("Insurance Expiration Date", "") or ""),
+        "policyNumber": row.get("Insurance Policy Number", "") or "",
+    }
+
+
 # ── Permit functions ─────────────────────────────────────────────────
 
 def generate_permit_ids(count: int) -> list[str]:
@@ -164,6 +246,7 @@ def get_permit_history() -> list[dict]:
     return [
         {
             "id": p["id"],
+            "driverId": p.get("driver_id"),
             "driverName": p.get("driver_name", ""),
             "tractor": p.get("tractor", ""),
             "state": p.get("state", ""),

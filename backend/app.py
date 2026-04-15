@@ -1,8 +1,10 @@
 import uuid
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import (
+    LoginRequest,
+    MegaInsuranceRequest,
     PermitOrderRequest,
     PermitOrderResponse,
     DriverCreateRequest,
@@ -19,35 +21,70 @@ from database import (
     insert_permits,
     update_permit_status,
     get_permit_history,
+    get_mega_insurance,
+    update_mega_insurance,
 )
 from tasks import run_permit_job, get_job_status, signal_captcha_solved
 from config import SUPPORTED_STATES, VALID_PERMIT_TYPES, COMPANY_TYPES, COMPANY_DRIVER_DEFAULTS
 from form_fields import get_merged_fields
+from auth import verify_credentials, create_token, require_auth
 
 app = FastAPI(title="Mega Trucking Permit API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+
+# ── Authentication ───────────────────────────────────────────────────
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest):
+    if not verify_credentials(body.username, body.password):
+        raise HTTPException(401, "Invalid username or password")
+    return {"token": create_token(body.username), "username": body.username}
+
+
+@app.get("/api/auth/me")
+def me(user: str = Depends(require_auth)):
+    return {"username": user}
 
 
 # ── Drivers ──────────────────────────────────────────────────────────
 
 @app.get("/api/drivers")
-def list_drivers():
+def list_drivers(_: str = Depends(require_auth)):
     return get_active_drivers()
 
 
 @app.post("/api/drivers")
-def create_driver(body: DriverCreateRequest):
+def create_driver(body: DriverCreateRequest, _: str = Depends(require_auth)):
     return create_driver_record(body.model_dump(exclude_none=True))
 
 
+# NOTE: Mega insurance routes must be defined BEFORE the /{driver_id} routes
+# so FastAPI matches the literal path first instead of trying to parse
+# "mega-insurance" as an integer driver_id.
+@app.get("/api/drivers/mega-insurance")
+def read_mega_insurance(_: str = Depends(require_auth)):
+    return get_mega_insurance()
+
+
+@app.put("/api/drivers/mega-insurance")
+def put_mega_insurance(body: MegaInsuranceRequest, _: str = Depends(require_auth)):
+    data = body.model_dump(exclude_none=True)
+    if not data:
+        raise HTTPException(400, "No fields to update")
+    updated = update_mega_insurance(data)
+    return {"success": True, "updated": updated}
+
+
 @app.put("/api/drivers/{driver_id}")
-def update_driver(driver_id: int, body: DriverUpdateRequest):
+def update_driver(driver_id: int, body: DriverUpdateRequest, _: str = Depends(require_auth)):
     data = body.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(400, "No fields to update")
@@ -55,7 +92,7 @@ def update_driver(driver_id: int, body: DriverUpdateRequest):
 
 
 @app.delete("/api/drivers/{driver_id}")
-def delete_driver(driver_id: int):
+def delete_driver(driver_id: int, _: str = Depends(require_auth)):
     ok = soft_delete_driver(driver_id)
     if not ok:
         raise HTTPException(404, "Driver not found")
@@ -65,7 +102,7 @@ def delete_driver(driver_id: int):
 # ── Permit Ordering ──────────────────────────────────────────────────
 
 @app.post("/api/permits/order")
-def order_permits(body: PermitOrderRequest):
+def order_permits(body: PermitOrderRequest, _: str = Depends(require_auth)):
     # Validate states
     for s in body.states:
         if s not in SUPPORTED_STATES:
@@ -75,10 +112,14 @@ def order_permits(body: PermitOrderRequest):
     if body.permitType not in VALID_PERMIT_TYPES:
         raise HTTPException(400, "Invalid permit type")
 
-    # Fetch driver records
-    drivers = get_drivers_by_ids(body.driverIds)
-    if not drivers:
+    # Fetch driver records. Supabase's `.in_()` dedupes IDs, so re-expand the
+    # list to honor duplicates: if the user asked for the same driver twice
+    # (e.g. via History → Duplicate), we want two permits, not one.
+    unique_drivers = get_drivers_by_ids(list(set(body.driverIds)))
+    if not unique_drivers:
         raise HTTPException(400, "No valid driver IDs provided")
+    by_id = {d["id"]: d for d in unique_drivers}
+    drivers = [by_id[did] for did in body.driverIds if did in by_id]
 
     # For states with separate trip/fuel forms, split "trip_fuel" into two
     # permits so they're tracked and processed independently by the queue.
@@ -110,22 +151,19 @@ def order_permits(body: PermitOrderRequest):
                 id_index += 1
                 driver_name = f"{driver['lastName']}, {driver['firstName']}"
 
-                # Build insurance object
+                # Build insurance object — always read from Supabase.
+                # Mega drivers (F/LP/T) all share the same values; updating
+                # them via the Driver Database tab updates every Mega row.
+                insurance = {
+                    "company": driver.get("insuranceCompany", ""),
+                    "effectiveDate": driver.get("insuranceEffective", ""),
+                    "expirationDate": driver.get("insuranceExpiration", ""),
+                    "policyNumber": driver.get("policyNumber", ""),
+                }
+                # USDOT: company drivers share Mega's DOT number; owner-ops use their own.
                 if driver.get("driverType") in COMPANY_TYPES:
-                    insurance = {
-                        "company": COMPANY_DRIVER_DEFAULTS["insurance_company"],
-                        "effectiveDate": COMPANY_DRIVER_DEFAULTS["insurance_effective"],
-                        "expirationDate": COMPANY_DRIVER_DEFAULTS["insurance_expiration"],
-                        "policyNumber": COMPANY_DRIVER_DEFAULTS["policy_number"],
-                    }
                     usdot = COMPANY_DRIVER_DEFAULTS["usdot"]
                 else:
-                    insurance = {
-                        "company": driver.get("insuranceCompany", ""),
-                        "effectiveDate": driver.get("insuranceEffective", ""),
-                        "expirationDate": driver.get("insuranceExpiration", ""),
-                        "policyNumber": driver.get("policyNumber", ""),
-                    }
                     usdot = driver.get("usdot", "")
 
                 # Supabase row — inserted as Pending before automation runs
@@ -184,7 +222,7 @@ def order_permits(body: PermitOrderRequest):
 # ── Job Status Polling ───────────────────────────────────────────────
 
 @app.get("/api/permits/status/{job_id}")
-def poll_job_status(job_id: str):
+def poll_job_status(job_id: str, _: str = Depends(require_auth)):
     status = get_job_status(job_id)
     if status is None:
         raise HTTPException(404, f"Job {job_id} not found")
@@ -194,7 +232,7 @@ def poll_job_status(job_id: str):
 # ── CAPTCHA Signal ───────────────────────────────────────────────────
 
 @app.post("/api/orders/{job_id}/captcha-solved")
-def captcha_solved(job_id: str, permit_id: str = ""):
+def captcha_solved(job_id: str, permit_id: str = "", _: str = Depends(require_auth)):
     signal_captcha_solved(job_id, permit_id)
     return {"success": True}
 
@@ -204,18 +242,18 @@ def captcha_solved(job_id: str, permit_id: str = ""):
 # For now, return empty arrays so the frontend doesn't break.
 
 @app.get("/api/permits/history")
-def permit_history():
+def permit_history(_: str = Depends(require_auth)):
     return get_permit_history()
 
 
 @app.get("/api/permits/form-fields")
-def get_form_fields(states: str, permitType: str):
+def get_form_fields(states: str, permitType: str, _: str = Depends(require_auth)):
     """Return dynamic field schema for the given states + permit type."""
     state_list = [s.strip() for s in states.split(",") if s.strip()]
     return {"fields": get_merged_fields(state_list, permitType)}
 
 
 @app.get("/api/permits/blankets")
-def blanket_permits():
+def blanket_permits(_: str = Depends(require_auth)):
     # TODO: Query blanket_permits table from Supabase
     return []

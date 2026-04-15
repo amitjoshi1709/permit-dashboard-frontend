@@ -1,3 +1,5 @@
+import { logout } from "../api";
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", section: "Main" },
   { key: "order", label: "Order Permits", section: "Main", badge: "+" },
@@ -68,10 +70,17 @@ export default function Sidebar({ activeView, onNavigate }) {
           <div className="w-7 h-7 rounded-full bg-steel flex items-center justify-center text-[11px] font-semibold flex-shrink-0">
             MC
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-xs font-medium">Michael Caballero</div>
             <div className="text-[10px] text-txt-3">Dispatcher</div>
           </div>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="text-[10px] text-txt-3 hover:text-accent-2 cursor-pointer bg-transparent border-none transition-colors"
+          >
+            Sign out
+          </button>
         </div>
       </div>
     </aside>

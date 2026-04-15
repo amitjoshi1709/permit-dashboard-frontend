@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchDrivers, createDriver, updateDriver, deleteDriver, DRIVER_TYPES, COMPANY_TYPES, COMPANY_DEFAULTS } from "../api";
+import { fetchDrivers, createDriver, updateDriver, deleteDriver, fetchMegaInsurance, updateMegaInsurance, DRIVER_TYPES, COMPANY_TYPES, COMPANY_DEFAULTS } from "../api";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", tractor: "", driverType: "",
@@ -201,6 +201,18 @@ export default function DriversView({ onToast }) {
   const [addForm, setAddForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
 
+  // Mega insurance (shared across all F/LP/T drivers)
+  const [megaInsurance, setMegaInsurance] = useState({
+    insuranceCompany: "", insuranceEffective: "",
+    insuranceExpiration: "", policyNumber: "",
+  });
+  const [editingMega, setEditingMega] = useState(false);
+  const [megaForm, setMegaForm] = useState({
+    insuranceCompany: "", insuranceEffective: "",
+    insuranceExpiration: "", policyNumber: "",
+  });
+  const [savingMega, setSavingMega] = useState(false);
+
   function load() {
     setLoading(true);
     fetchDrivers()
@@ -215,7 +227,37 @@ export default function DriversView({ onToast }) {
       });
   }
 
-  useEffect(() => { load(); }, []);
+  function loadMegaInsurance() {
+    fetchMegaInsurance()
+      .then((data) => setMegaInsurance(data || {}))
+      .catch(() => {});
+  }
+
+  useEffect(() => { load(); loadMegaInsurance(); }, []);
+
+  function startEditMega() {
+    setMegaForm({ ...megaInsurance });
+    setEditingMega(true);
+  }
+
+  function cancelEditMega() {
+    setEditingMega(false);
+  }
+
+  async function saveMegaInsurance() {
+    setSavingMega(true);
+    try {
+      const result = await updateMegaInsurance(megaForm);
+      onToast?.("✓", `Mega insurance updated · ${result.updated || 0} driver(s)`);
+      setEditingMega(false);
+      loadMegaInsurance();
+      load();
+    } catch {
+      onToast?.("⚠", "Failed to update Mega insurance");
+    } finally {
+      setSavingMega(false);
+    }
+  }
 
   function startEdit(driver) {
     setEditingId(driver.id);
@@ -310,6 +352,84 @@ export default function DriversView({ onToast }) {
             + Add Driver
           </button>
         </div>
+      </div>
+
+      {/* Mega insurance card — shared across all F/LP/T drivers */}
+      <div className="px-[18px] py-4 border-b border-subtle bg-accent/[0.04]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="text-[12px] font-semibold text-txt-1">Mega Trucking Insurance</div>
+          <span className="text-[10px] text-txt-3 bg-navy-3 rounded-md px-1.5 py-0.5">
+            Shared by all F / LP / T drivers
+          </span>
+          {!editingMega && (
+            <button
+              onClick={startEditMega}
+              className="ml-auto bg-navy-3 border border-subtle text-txt-2 rounded-md px-2.5 py-1 text-[11px] cursor-pointer hover:bg-navy-4 hover:text-accent-2 hover:border-accent transition-all font-sans"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        {!editingMega ? (
+          <div className="grid grid-cols-4 gap-x-6 gap-y-2 text-[12px]">
+            <Detail label="Company" value={megaInsurance.insuranceCompany} />
+            <Detail label="Policy #" value={megaInsurance.policyNumber} mono />
+            <Detail label="Effective" value={megaInsurance.insuranceEffective} />
+            <Detail label="Expiration" value={megaInsurance.insuranceExpiration} />
+          </div>
+        ) : (
+          <div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <Field
+                label="Insurance Company"
+                value={megaForm.insuranceCompany}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceCompany: v }))}
+                placeholder="e.g. Prime Property and Casualty"
+              />
+              <Field
+                label="Policy Number"
+                value={megaForm.policyNumber}
+                onChange={(v) => setMegaForm((f) => ({ ...f, policyNumber: v }))}
+                placeholder="e.g. PC24040671"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <Field
+                label="Effective Date"
+                value={megaForm.insuranceEffective}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceEffective: v }))}
+                placeholder="MM/DD/YYYY"
+              />
+              <Field
+                label="Expiration Date"
+                value={megaForm.insuranceExpiration}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceExpiration: v }))}
+                placeholder="MM/DD/YYYY"
+              />
+            </div>
+            <div className="rounded-lg px-3.5 py-2 text-[11.5px] leading-relaxed bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-2 mb-3">
+              <span className="flex-shrink-0 mt-px">⚠</span>
+              <span>This will update the insurance info on every F / LP / T driver in Supabase.</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={saveMegaInsurance}
+                disabled={savingMega}
+                className="bg-accent text-white border-none px-5 py-[9px] rounded-lg text-[13px] font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans disabled:bg-navy-3 disabled:text-txt-3 disabled:cursor-not-allowed"
+              >
+                {savingMega ? "Saving..." : "Update All Mega Drivers"}
+              </button>
+              <button
+                onClick={cancelEditMega}
+                disabled={savingMega}
+                className="bg-transparent border border-subtle2 text-txt-2 px-5 py-[9px] rounded-lg text-[13px] cursor-pointer hover:bg-navy-3 hover:text-txt-1 transition-all font-sans disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add driver form */}
