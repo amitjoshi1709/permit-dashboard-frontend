@@ -40,6 +40,11 @@ FILL_SETTLE_MS = 250      # wait between fill and verify (KO async)
 # Permit type → top-of-page radio id (from earlier debug dumps).
 #   "800"=Blanket, "801"=Trip, "803"=Route Specific Blanket, "804"=Vehicle Specific Blanket
 PERMIT_TYPE_RADIO_ID = {
+    # Florida no longer orders plain trip/fuel permits from the dashboard — the
+    # dispatcher-facing option is "OS/OW" which runs this same script and still
+    # clicks the Trip (801) radio at the top of the portal. trip/fuel/trip_fuel
+    # are kept for back-compat with history rows being duplicated.
+    "os_ow":                    "801",
     "trip":                     "801",
     "fuel":                     "801",
     "trip_fuel":                "801",
@@ -102,13 +107,21 @@ def _reset_screenshots(job_id: str):
 
 
 def _screenshot(page: Page, name: str) -> str:
+    """Take a full-page screenshot, but never let a screenshot failure kill the run.
+    Playwright's page.screenshot() can raise during navigation ("Page is navigating
+    and changing the content") which would bubble up through the runner as a silent
+    error. We swallow those errors — the screenshot is diagnostic, not functional."""
     global _screenshot_counter
     _screenshot_counter += 1
     prefix = str(_screenshot_counter).zfill(2)
     filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
+    try:
+        page.screenshot(path=filepath, full_page=True, timeout=10000)
+        print(f"  [SCREENSHOT] {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"  [SCREENSHOT] Skipped '{name}' — {type(e).__name__}: {str(e)[:120]}")
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -324,12 +337,18 @@ def _create_application(page: Page):
     if not create_btn:
         _fatal(page, "Could not find Create Application button after 30s")
 
+    print("  [CREATE-APP] Button found — clicking...")
     try:
         create_btn.first.click(timeout=10000)
+        print("  [CREATE-APP] Click dispatched")
     except Exception as e:
         _fatal(page, f"Could not click Create Application: {e}")
 
-    page.wait_for_load_state("domcontentloaded")
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=30000)
+        print("  [CREATE-APP] DOM content loaded")
+    except PlaywrightTimeoutError:
+        print("  [CREATE-APP] DOM load timeout — continuing anyway")
     page.wait_for_timeout(3000)
     _screenshot(page, "create_application_clicked")
     print("[OK] Create Application page loaded")
@@ -1026,8 +1045,8 @@ def _fill_vehicle_and_load(page: Page, permit: dict, extra: dict, permit_type: s
         if final_bad:
             _fatal(page, "Dimension fields blank after resweep: " + "; ".join(final_bad))
 
-    # ── 4. Identity of Load (trip only) ──
-    if permit_type == "trip":
+    # ── 4. Identity of Load (trip / os_ow only — blankets skip this section) ──
+    if permit_type in ("trip", "os_ow"):
         id_type = extra.get("identityOfLoadType")
         if id_type:
             _ko_select(page, "#IdentityOfLoadType", str(id_type), "Identity of Load Type")
@@ -1359,9 +1378,719 @@ def _fill_vehicle_and_load(page: Page, permit: dict, extra: dict, permit_type: s
 # Page 4: Save → Routing
 # ---------------------------------------------------------------------------
 
-def _save_and_route(page: Page, permit_type: str = "trip"):
-    """Click Save, then navigate to the next tab.
-    Trip permits → "Routing" tab. FL blanket variants → "Review & Submit" tab."""
+def _activate_tab(page: Page, tab_label: str, tab_keywords: list, settle_ms: int = 2500):
+    """Activate a jQuery UI tab anchor by matching lowercase keywords in its text.
+    The anchor is tabindex=-1 so Playwright can't normally click it; we use the jQuery
+    UI tabs API, with <li> click + direct anchor click as fallbacks."""
+    print(f"\n[ACT] Clicking {tab_label} tab...")
+    try:
+        result = page.evaluate(
+            """(keywords) => {
+                const anchors = Array.from(document.querySelectorAll('a.ui-tabs-anchor'));
+                const target = anchors.find(a => {
+                    const t = (a.textContent || '').toLowerCase();
+                    return keywords.every(k => t.includes(k));
+                });
+                if (!target) return {ok:false, err:'no_tab_anchor', anchors: anchors.map(a => (a.textContent || '').trim())};
+                if (typeof jQuery !== 'undefined') {
+                    let $tabs = jQuery(target).closest('.ui-tabs');
+                    if ($tabs.length && $tabs.tabs) {
+                        let idx = -1;
+                        $tabs.find('a.ui-tabs-anchor').each(function(i, a) { if (a === target) idx = i; });
+                        if (idx >= 0) {
+                            try { $tabs.tabs('option', 'active', idx); return {ok:true, via:'tabs_api', idx}; }
+                            catch (e) { /* fall through */ }
+                        }
+                    }
+                }
+                const li = target.closest('li');
+                if (li) { li.click(); return {ok:true, via:'li_click'}; }
+                target.click();
+                return {ok:true, via:'anchor_click'};
+            }""",
+            tab_keywords,
+        )
+        if not result.get("ok"):
+            _fatal(page, f"Could not activate {tab_label} tab: {result}")
+        print(f'  [{tab_label.upper()}] Activated via {result.get("via")}')
+        page.wait_for_timeout(settle_ms)
+    except Exception as e:
+        _fatal(page, f"Could not click {tab_label}: {e}")
+
+
+def _fill_routing_fields(page: Page, extra: dict):
+    """Fill the Starting Location and Destination Location groups on the Routing tab.
+
+    The portal has a "Type" dropdown per endpoint that defaults to Address — we leave
+    it alone. We fill Address/City/Zip for each side. Selectors are discovered by
+    walking from the group heading text ("Starting Location" / "Destination Location")
+    to the nearest visible Address/City/Zip inputs.
+    """
+    print("\n[ACT] Filling routing fields...")
+
+    origin_addr = extra.get("originAddress", "") or ""
+    origin_city = extra.get("originCity", "") or ""
+    origin_zip  = extra.get("originZip", "") or ""
+    dest_addr   = extra.get("destinationAddress", "") or ""
+    dest_city   = extra.get("destinationCity", "") or ""
+    dest_zip    = extra.get("destinationZip", "") or ""
+
+    if not any([origin_addr, origin_city, origin_zip, dest_addr, dest_city, dest_zip]):
+        print("  [WARN] No routing values provided — skipping route fill")
+        return
+
+    # Resolve selectors via DOM walk: find a heading text node, then look inside its
+    # enclosing group container for visible Address/City/Zip inputs. We *tag* the
+    # matched inputs with unique data-claude-route attributes and return selectors
+    # based on those tags — that way we avoid collisions with hidden duplicate ids
+    # elsewhere in the DOM (the portal has #AddressLine1/#City/#ZipCode on multiple
+    # hidden template forms). Also returns a debug_dump so failures can surface the
+    # actual DOM around each heading.
+    def discover(heading_keywords: list[str], side: str) -> dict | None:
+        return page.evaluate(
+            """([kws, side]) => {
+                function visibleInput(el) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 || r.height === 0) return false;
+                    if (el.offsetParent === null) return false;
+                    if (el.type === 'hidden') return false;
+                    return true;
+                }
+                function describe(el) {
+                    return {
+                        tag: el.tagName,
+                        id: el.id || null,
+                        name: el.name || null,
+                        type: el.type || null,
+                        placeholder: el.placeholder || null,
+                        ariaLabel: el.getAttribute('aria-label'),
+                        visible: visibleInput(el),
+                        labelText: (el.labels && el.labels[0]) ? (el.labels[0].textContent || '').trim().slice(0, 80) : null,
+                    };
+                }
+                const debug = { heading: kws.join(' '), containers: [] };
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const t = (node.textContent || '').trim().toLowerCase();
+                    if (!t) continue;
+                    if (!kws.every(k => t.includes(k))) continue;
+                    // Skip heading matches that live inside a hidden subtree
+                    if (node.parentElement && node.parentElement.offsetParent === null) continue;
+
+                    // Found heading text. Walk up to the enclosing container, then find inputs.
+                    let p = node.parentElement;
+                    for (let i = 0; i < 12 && p; i++, p = p.parentElement) {
+                        const allInputs = Array.from(p.querySelectorAll('input[type="text"], input:not([type])'));
+                        const inputs = allInputs.filter(visibleInput);
+                        debug.containers.push({
+                            depth: i,
+                            containerTag: p.tagName,
+                            containerId: p.id || null,
+                            containerClass: (p.className && typeof p.className === 'string') ? p.className.slice(0, 120) : null,
+                            visibleInputs: inputs.map(describe),
+                            totalInputs: allInputs.length,
+                        });
+                        if (inputs.length < 3) continue;
+                        const roles = {address: null, city: null, zip: null};
+                        for (const el of inputs) {
+                            const hint = ((el.id || '') + ' ' + (el.name || '') + ' ' +
+                                (el.placeholder || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+                            let labelText = '';
+                            if (el.labels && el.labels.length) labelText = el.labels[0].textContent || '';
+                            const combined = (hint + ' ' + labelText).toLowerCase();
+                            if (!roles.address && combined.includes('address') && !combined.includes('city') && !combined.includes('zip')) roles.address = el;
+                            else if (!roles.city && combined.includes('city')) roles.city = el;
+                            else if (!roles.zip && (combined.includes('zip') || combined.includes('postal'))) roles.zip = el;
+                        }
+                        if (roles.address && roles.city && roles.zip) {
+                            // Tag the exact elements so selection is unambiguous.
+                            roles.address.setAttribute('data-claude-route', side + '-address');
+                            roles.city.setAttribute('data-claude-route',    side + '-city');
+                            roles.zip.setAttribute('data-claude-route',     side + '-zip');
+                            return {
+                                address: `[data-claude-route="${side}-address"]`,
+                                city:    `[data-claude-route="${side}-city"]`,
+                                zip:     `[data-claude-route="${side}-zip"]`,
+                                matched: {
+                                    address: describe(roles.address),
+                                    city:    describe(roles.city),
+                                    zip:     describe(roles.zip),
+                                },
+                                debug: debug,
+                            };
+                        }
+                    }
+                }
+                return { error: 'no-match', debug: debug };
+            }""",
+            [heading_keywords, side],
+        )
+
+    def _log_debug(label: str, payload):
+        if not payload:
+            print(f"  [ROUTE-DEBUG] {label}: <no payload>")
+            return
+        dbg = payload.get("debug") if isinstance(payload, dict) else None
+        if not dbg:
+            return
+        print(f"  [ROUTE-DEBUG] {label} heading=\"{dbg.get('heading')}\" containers examined={len(dbg.get('containers', []))}")
+        for c in dbg.get("containers", [])[:6]:
+            print(f"    depth={c['depth']} <{c['containerTag']}> id={c.get('containerId')!r} class={c.get('containerClass')!r} inputs={len(c.get('visibleInputs', []))}/{c.get('totalInputs')}")
+            for inp in c.get("visibleInputs", []):
+                print(f"       id={inp.get('id')!r} name={inp.get('name')!r} placeholder={inp.get('placeholder')!r} aria={inp.get('ariaLabel')!r} label={inp.get('labelText')!r}")
+
+    origin_sels = discover(["starting", "location"], "origin")
+    if not origin_sels or origin_sels.get("error"):
+        _log_debug("Starting Location", origin_sels)
+        _fatal(page, "Could not locate Starting Location input group on Routing tab")
+    print(f"  [ROUTE] Origin matched: {origin_sels.get('matched')}")
+    if origin_addr: _safe_fill(page, origin_sels["address"], origin_addr, "Origin Address")
+    if origin_city: _safe_fill(page, origin_sels["city"],    origin_city, "Origin City")
+    if origin_zip:  _safe_fill(page, origin_sels["zip"],     origin_zip,  "Origin Zip")
+
+    dest_sels = discover(["destination", "location"], "dest")
+    if not dest_sels or dest_sels.get("error"):
+        _log_debug("Destination Location", dest_sels)
+        _fatal(page, "Could not locate Destination Location input group on Routing tab")
+    print(f"  [ROUTE] Destination matched: {dest_sels.get('matched')}")
+    if dest_addr: _safe_fill(page, dest_sels["address"], dest_addr, "Destination Address")
+    if dest_city: _safe_fill(page, dest_sels["city"],    dest_city, "Destination City")
+    if dest_zip:  _safe_fill(page, dest_sels["zip"],     dest_zip,  "Destination Zip")
+
+    _screenshot(page, "routing_fields_filled")
+    print("[OK] Routing fields filled")
+
+
+def _click_generate_validated_route(page: Page):
+    """Click the 'Generate Validated Route' button on the Routing tab."""
+    print("\n[ACT] Clicking Generate Validated Route...")
+    try:
+        btn = page.locator(
+            'button:has-text("Generate Validated Route"), '
+            'input[value*="Generate Validated Route"], '
+            'a:has-text("Generate Validated Route")'
+        )
+        if btn.count() == 0:
+            # Fallback: substring match on "Generate"
+            btn = page.locator('button:has-text("Generate"), input[value*="Generate"], a:has-text("Generate")')
+        btn.first.click(timeout=10000)
+        print("  [GEN-ROUTE] Click dispatched")
+    except Exception as e:
+        _fatal(page, f"Could not click Generate Validated Route: {e}")
+    page.wait_for_timeout(3000)
+    _screenshot(page, "route_generated")
+
+
+def _dismiss_route_disclaimer(page: Page):
+    """Dismiss the 'Route Disclaimer' popup by clicking 'I understand'."""
+    print("\n[ACT] Dismissing Route Disclaimer...")
+    # The disclaimer is a jQuery UI dialog. We find any visible dialog button whose
+    # text contains "understand" or defaults to "I understand".
+    for attempt in range(1, 11):
+        try:
+            result = page.evaluate(
+                """() => {
+                    const dialogs = Array.from(document.querySelectorAll('.ui-dialog'));
+                    const visible = dialogs.filter(d => {
+                        const r = d.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    });
+                    for (const d of visible) {
+                        const btns = Array.from(d.querySelectorAll('button'));
+                        // Prefer a button whose text contains "understand"
+                        let target = btns.find(b => (b.textContent || '').toLowerCase().includes('understand'));
+                        // Fallback: first visible button
+                        if (!target) target = btns.find(b => {
+                            const r = b.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0;
+                        });
+                        if (target) {
+                            target.click();
+                            return {ok:true, text:(target.textContent || '').trim()};
+                        }
+                    }
+                    return {ok:false};
+                }"""
+            )
+            if result.get("ok"):
+                print(f'  [DISCLAIMER] Clicked "{result["text"]}" \u2713')
+                page.wait_for_timeout(1200)
+                return
+        except Exception as e:
+            print(f"  [DISCLAIMER] attempt {attempt} raised: {e}")
+        page.wait_for_timeout(1000)
+    # Not finding the disclaimer isn't necessarily fatal — some routes may not trigger
+    # one. Log and continue.
+    print("  [DISCLAIMER] No dialog found after 10s — continuing")
+
+
+def _accept_routing_disclaimer(page: Page):
+    """Tick the 'Accept' checkbox under the Routing Disclaimer on Review & Submit.
+
+    Until this checkbox is checked, the Submit button does not advance the page — it
+    just revalidates and silently stays on the same tab. We locate the checkbox by
+    walking the DOM for a 'Routing Disclaimer' or 'Accept' label, tag the matched
+    element with a unique data attribute, and click through that selector.
+    """
+    print("\n[ACT] Accepting Routing Disclaimer...")
+    # On FL OS/OW, the Accept element shows up on the Review tab alongside the Submit
+    # button. It may be a button, a checkbox, or a label wrapping a hidden input —
+    # scan broadly for anything containing 'Accept' text, including checkboxes and
+    # labels, both visible and off-viewport.
+    probe_js = """() => {
+        function inRenderedDom(el) {
+            // True if the element is actually rendered (has a layout box),
+            // even if it's scrolled off-screen. This is looser than offsetParent check.
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return false;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            return true;
+        }
+
+        // 1. Try every checkbox in the DOM (including those scrolled out of view).
+        const allBoxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+        const renderedBoxes = allBoxes.filter(inRenderedDom);
+        for (const cb of renderedBoxes) {
+            let labelText = '';
+            if (cb.labels && cb.labels.length) labelText = cb.labels[0].textContent || '';
+            // Also check adjacent text / parent text for "accept"
+            const parentText = cb.parentElement ? (cb.parentElement.textContent || '') : '';
+            const combined = ((cb.id || '') + ' ' + (cb.name || '') + ' ' + labelText + ' ' + parentText).toLowerCase();
+            if (combined.includes('accept') || combined.includes('agree') || combined.includes('disclaimer')) {
+                cb.setAttribute('data-claude-accept', '1');
+                return {
+                    ok: true, kind: 'checkbox',
+                    matched: { id: cb.id||null, name: cb.name||null, checked: cb.checked,
+                               labelText: labelText.trim().slice(0, 120) },
+                };
+            }
+        }
+
+        // 2. Try buttons / inputs / anchors with Accept/Agree text.
+        const clickables = Array.from(document.querySelectorAll(
+            'button, input[type="submit"], input[type="button"], input[type="image"], a, [role="button"]'
+        )).filter(inRenderedDom);
+        for (const el of clickables) {
+            const text = ((el.textContent || '') + ' ' + (el.value || '') + ' ' + (el.title || '') + ' ' +
+                          (el.getAttribute('aria-label') || '')).trim();
+            if (!/\\bAccept\\b/i.test(text) && !/\\bI\\s*Agree\\b/i.test(text) && !/\\bAgree\\b/i.test(text)) continue;
+            if (/cancel|reject|decline|close|back/i.test(text)) continue;
+            const disabled = el.disabled || el.getAttribute('disabled') !== null ||
+                             (el.classList && el.classList.contains('disabled'));
+            if (disabled) continue;
+            el.setAttribute('data-claude-accept', '1');
+            return {
+                ok: true, kind: 'button',
+                matched: { tag: el.tagName, id: el.id || null,
+                           text: text.slice(0, 120),
+                           dataBind: el.getAttribute('data-bind') },
+            };
+        }
+
+        // 3. Last resort: walk all text nodes for "Accept" and look for an interactive
+        //    ancestor (clickable div, label, span with handler) to click.
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            const t = (node.textContent || '').trim();
+            if (!/^Accept$|^I\\s*Agree$|^I\\s*Accept$/i.test(t)) continue;
+            let p = node.parentElement;
+            for (let i = 0; i < 6 && p; i++, p = p.parentElement) {
+                if (!inRenderedDom(p)) continue;
+                const tag = p.tagName;
+                if (['LABEL', 'DIV', 'SPAN', 'A', 'BUTTON'].includes(tag)) {
+                    p.setAttribute('data-claude-accept', '1');
+                    return {
+                        ok: true, kind: 'text-ancestor',
+                        matched: { tag, id: p.id || null, text: t.slice(0, 80), depth: i },
+                    };
+                }
+            }
+        }
+
+        // Diagnostic dump on failure — collect everything with 'accept' anywhere.
+        const anyAccept = Array.from(document.querySelectorAll('*')).filter(el => {
+            if (!inRenderedDom(el)) return false;
+            const txt = (el.textContent || '').trim();
+            if (txt.length > 200) return false;  // big containers
+            return /accept|disclaimer|agree/i.test(txt) ||
+                   /accept|disclaimer|agree/i.test(el.id || '') ||
+                   /accept|disclaimer|agree/i.test(el.className && typeof el.className === 'string' ? el.className : '');
+        }).slice(0, 40).map(el => ({
+            tag: el.tagName, id: el.id || null,
+            class: (el.className && typeof el.className === 'string') ? el.className.slice(0, 80) : null,
+            text: (el.textContent || '').trim().slice(0, 100),
+        }));
+        return {
+            ok: false,
+            visibleCheckboxCount: renderedBoxes.length,
+            allCheckboxCount: allBoxes.length,
+            diagnostic: anyAccept,
+        };
+    }"""
+
+    result = None
+    last_dump = None
+    for attempt in range(40):  # 40 * 500ms = 20s
+        try:
+            result = page.evaluate(probe_js)
+        except Exception as e:
+            print(f"  [ACCEPT] probe raised: {e}")
+            result = None
+        if result and result.get("ok"):
+            if attempt > 0:
+                print(f"  [ACCEPT] Button appeared on attempt {attempt + 1} (~{attempt * 0.5:.1f}s wait)")
+            break
+        last_dump = result
+        page.wait_for_timeout(500)
+
+    if not result or not result.get("ok"):
+        print(f"  [ACCEPT-DEBUG] Last probe result: {last_dump}")
+        _fatal(page, "Could not locate Routing Disclaimer 'Accept' element on Review & Submit (waited 20s)")
+
+    kind = result.get("kind")
+    print(f"  [ACCEPT] Found ({kind}): {result.get('matched')}")
+    el = page.locator('[data-claude-accept="1"]').first
+    try:
+        el.scroll_into_view_if_needed(timeout=5000)
+    except Exception:
+        pass
+    try:
+        if kind == "checkbox":
+            try:
+                el.check(timeout=5000)
+            except Exception:
+                el.click(force=True, timeout=5000)
+        else:
+            el.click(timeout=5000)
+    except Exception as e:
+        _fatal(page, f"Could not click Accept element: {e}")
+    print("  [ACCEPT] Click dispatched")
+
+    # The Accept click triggers a KO change handler which revalidates the Review tab
+    # and enables the Submit button. Rushing straight into Submit fires while the
+    # button is still disabled / mid-rerender, and the click silently no-ops. Wait
+    # patiently for network idle, then give the KO formatters another beat.
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except PlaywrightTimeoutError:
+        pass
+    page.wait_for_timeout(2500)
+    _screenshot(page, "disclaimer_accepted")
+
+
+def _click_submit_on_review(page: Page):
+    """Click the Submit button on the Review & Submit tab.
+
+    This requires the Routing Disclaimer Accept checkbox to already be ticked —
+    otherwise Submit silently re-renders the same page instead of advancing to
+    payment. Caller must invoke _accept_routing_disclaimer(page) first.
+
+    We wait for the Submit button to be enabled before clicking, then wait for the
+    page to actually transition (URL change or payment marker appearing) before
+    returning — checking the Accept checkbox disappearance isn't reliable because
+    KO rerenders can drop our data-claude-accept attribute without actually
+    leaving the Review tab.
+    """
+    print("\n[ACT] Clicking Submit on Review & Submit...")
+
+    # 1. Find the *visible, enabled* Submit button on the Review tab and tag it.
+    #    The page has multiple "Submit" buttons across hidden forms — plain
+    #    `:has-text("Submit")` + `.first` often resolves to one of those hidden
+    #    duplicates, and the click silently no-ops while our waits resolve
+    #    instantly (networkidle returns, URL never changes → "advanced" never
+    #    really happened). Tag the right one uniquely, click via that tag, then
+    #    verify by polling for the tag to actually disappear.
+    print("  [SUBMIT] Locating visible, enabled Submit button...")
+    tag_result = None
+    for attempt in range(30):  # 30 * 500ms = 15s
+        try:
+            tag_result = page.evaluate(
+                """() => {
+                    function visible(el) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width === 0 || r.height === 0) return false;
+                        if (el.offsetParent === null) return false;
+                        return true;
+                    }
+                    const cands = Array.from(document.querySelectorAll(
+                        'button, input[type="submit"], input[type="button"]'
+                    )).filter(visible);
+                    for (const el of cands) {
+                        const text = ((el.textContent || '') + ' ' + (el.value || '') + ' ' + (el.title || '')).trim();
+                        if (!/^\\s*Submit\\s*$/i.test(text) && !/\\bSubmit\\b/i.test(text)) continue;
+                        if (/cancel|search|filter|reset/i.test(text)) continue;
+                        const disabled = el.disabled || el.getAttribute('disabled') !== null ||
+                                         (el.classList && el.classList.contains('disabled'));
+                        if (disabled) return { found: true, disabled: true, text: text.slice(0, 80) };
+                        el.setAttribute('data-claude-submit', '1');
+                        const r = el.getBoundingClientRect();
+                        return {
+                            found: true, disabled: false, text: text.slice(0, 80),
+                            id: el.id || null, dataBind: el.getAttribute('data-bind'),
+                            rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+                        };
+                    }
+                    return { found: false };
+                }"""
+            )
+        except Exception as e:
+            tag_result = {"found": False, "error": str(e)}
+        if tag_result.get("found") and not tag_result.get("disabled"):
+            break
+        page.wait_for_timeout(500)
+
+    if not tag_result or not tag_result.get("found") or tag_result.get("disabled"):
+        print(f"  [SUBMIT-DEBUG] Final tag result: {tag_result}")
+        _fatal(page, "Could not find a visible, enabled Submit button on Review & Submit")
+
+    print(f"  [SUBMIT] Tagged button: {tag_result}")
+
+    start_url = page.url
+    try:
+        btn = page.locator('[data-claude-submit="1"]').first
+        btn.scroll_into_view_if_needed(timeout=5000)
+        btn.click(timeout=10000)
+        print("  [SUBMIT] Click dispatched")
+    except Exception as e:
+        _fatal(page, f"Could not click Submit: {e}")
+
+    # 2. Verify the click actually did something. Our tag is on a specific DOM
+    #    element — if the page rerenders, that element is destroyed and the tag
+    #    goes with it. Poll for the tag to disappear OR the URL to change OR a
+    #    real payment marker to appear. Wait up to 45s because FL's postback can
+    #    be slow.
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
+    except PlaywrightTimeoutError:
+        pass
+    try:
+        page.wait_for_load_state("networkidle", timeout=20000)
+    except PlaywrightTimeoutError:
+        pass
+
+    advanced = False
+    advance_reason = None
+    for _ in range(90):  # 90 * 500ms = 45s
+        try:
+            if page.url != start_url:
+                advanced = True; advance_reason = "url-change"; break
+            # Tag gone → the specific Submit element was unmounted (real rerender)
+            if page.locator('[data-claude-submit="1"]').count() == 0:
+                advanced = True; advance_reason = "submit-tag-gone"; break
+            pay_marker = page.locator(
+                'button[title*="Secure Payment Gateway"], button[data-bind*="RedirectToGateway"]'
+            )
+            if pay_marker.count() > 0:
+                advanced = True; advance_reason = "payment-button-present"; break
+        except Exception:
+            pass
+        page.wait_for_timeout(500)
+
+    if not advanced:
+        print("  [SUBMIT] Warning: no advance signal detected after Submit — continuing anyway")
+    else:
+        print(f"  [SUBMIT] Page advanced after Submit ({advance_reason})")
+
+    # Give the Payment tab DOM another beat to fully render before the caller
+    # tries to activate it.
+    page.wait_for_timeout(2500)
+    _screenshot(page, "submitted")
+
+
+def _proceed_to_secure_checkout(page: Page):
+    """Select Online Payment radio (usually default) and click Secure Payment Gateway.
+    Waits for the SecureCheckout page to load, then returns. Success = we reached the
+    external checkout page (we don't fill card details — those aren't stored anywhere)."""
+    print("\n[ACT] Selecting Online Payment + Secure Payment Gateway...")
+
+    # 0. Wait for the Payment tab contents to render — the Secure Payment Gateway
+    #    button (or Online Payment radio) must appear in the DOM before we probe.
+    print("  [PAY] Waiting for Payment tab contents to render...")
+    appeared = False
+    for _ in range(30):  # 30 * 500ms = 15s
+        try:
+            marker_count = page.evaluate(
+                """() => {
+                    const q = document.querySelector('button[title*="Secure Payment Gateway"], button[data-bind*="RedirectToGateway"]');
+                    return q && q.offsetParent !== null ? 1 : 0;
+                }"""
+            )
+            if marker_count:
+                appeared = True
+                break
+        except Exception:
+            pass
+        page.wait_for_timeout(500)
+    if not appeared:
+        print("  [PAY] Warning: Payment tab contents did not render within 15s — proceeding anyway")
+
+    # 1. Select the Online Payment radio. It's typically the default, so we only click
+    #    if it's not already selected.
+    try:
+        result = page.evaluate(
+            """() => {
+                const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
+                for (const r of radios) {
+                    const label = r.labels && r.labels[0] ? r.labels[0].textContent : '';
+                    const combined = ((r.id || '') + ' ' + (r.name || '') + ' ' +
+                        (r.value || '') + ' ' + label).toLowerCase();
+                    if (combined.includes('online') && combined.includes('payment')) {
+                        if (!r.checked) r.click();
+                        return {ok:true, alreadyChecked: r.checked};
+                    }
+                }
+                return {ok:false};
+            }"""
+        )
+        if result.get("ok"):
+            print(f"  [PAY] Online Payment radio selected (was already checked: {result.get('alreadyChecked')})")
+        else:
+            print("  [PAY] Online Payment radio not found — assuming default")
+    except Exception as e:
+        print(f"  [PAY] Radio select raised: {e}")
+
+    page.wait_for_timeout(1200)
+
+    # 2. Click the Secure Payment Gateway button/link.
+    #    The button starts disabled (disabled="disabled"); it enables after the Online
+    #    Payment radio is selected AND any per-fee acknowledgment checkboxes on the
+    #    payment page are ticked. We poll up to 20s for it to become enabled, and if
+    #    it doesn't, we scan the page for any remaining unchecked acknowledgment boxes
+    #    and tick them, then retry.
+    print("  [PAY] Waiting for Secure Payment Gateway button to become enabled...")
+    btn_selector = (
+        'button:has-text("Secure Payment Gateway"), '
+        'input[value*="Secure Payment Gateway"], '
+        'a:has-text("Secure Payment Gateway")'
+    )
+    enabled = False
+    for attempt in range(40):  # 40 * 500ms = 20s
+        try:
+            state = page.evaluate(
+                """() => {
+                    const q = document.querySelector('button[title*="Secure Payment Gateway"], button[data-bind*="RedirectToGateway"]');
+                    if (!q) return { found: false };
+                    return {
+                        found: true,
+                        disabled: q.disabled || q.getAttribute('disabled') !== null,
+                        visible: q.offsetParent !== null,
+                    };
+                }"""
+            )
+        except Exception:
+            state = {"found": False}
+        if state.get("found") and not state.get("disabled") and state.get("visible"):
+            enabled = True
+            break
+        # Halfway through, try ticking any unchecked payment-page acknowledgment
+        # checkboxes that may be gating the button.
+        if attempt == 10:
+            try:
+                ticked = page.evaluate(
+                    """() => {
+                        const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+                            .filter(cb => cb.offsetParent !== null && !cb.checked);
+                        const touched = [];
+                        for (const cb of boxes) {
+                            const lt = (cb.labels && cb.labels[0]) ? (cb.labels[0].textContent || '') : '';
+                            const combined = ((cb.id || '') + ' ' + (cb.name || '') + ' ' + lt).toLowerCase();
+                            if (combined.includes('accept') || combined.includes('agree') ||
+                                combined.includes('acknowledge') || combined.includes('disclaimer') ||
+                                combined.includes('terms')) {
+                                cb.click();
+                                touched.push({ id: cb.id || null, name: cb.name || null, label: lt.trim().slice(0, 80) });
+                            }
+                        }
+                        return touched;
+                    }"""
+                )
+                if ticked:
+                    print(f"  [PAY] Auto-ticked acknowledgment checkboxes: {ticked}")
+            except Exception as e:
+                print(f"  [PAY] Auto-tick pass raised: {e}")
+        page.wait_for_timeout(500)
+
+    if not enabled:
+        # Dump DOM state for debugging
+        try:
+            dump = page.evaluate(
+                """() => {
+                    const btn = document.querySelector('button[title*="Secure Payment Gateway"], button[data-bind*="RedirectToGateway"]');
+                    const radios = Array.from(document.querySelectorAll('input[type="radio"]'))
+                        .filter(r => r.offsetParent !== null)
+                        .map(r => ({ id: r.id||null, name: r.name||null, value: r.value||null, checked: r.checked,
+                                     label: (r.labels && r.labels[0]) ? (r.labels[0].textContent||'').trim().slice(0,80) : null }));
+                    const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+                        .filter(cb => cb.offsetParent !== null)
+                        .map(cb => ({ id: cb.id||null, name: cb.name||null, checked: cb.checked,
+                                      label: (cb.labels && cb.labels[0]) ? (cb.labels[0].textContent||'').trim().slice(0,80) : null }));
+                    return {
+                        buttonPresent: !!btn,
+                        buttonDisabled: btn ? (btn.disabled || btn.getAttribute('disabled') !== null) : null,
+                        buttonText: btn ? (btn.textContent||'').trim() : null,
+                        radios,
+                        checkboxes: boxes,
+                    };
+                }"""
+            )
+            print(f"  [PAY-DEBUG] {dump}")
+        except Exception as e:
+            print(f"  [PAY-DEBUG] dump raised: {e}")
+        _fatal(page, "Secure Payment Gateway button never became enabled — see PAY-DEBUG above")
+
+    print("  [PAY] Clicking Secure Payment Gateway...")
+    try:
+        btn = page.locator(btn_selector)
+        btn.first.click(timeout=10000)
+    except Exception as e:
+        _fatal(page, f"Could not click Secure Payment Gateway: {e}")
+
+    # 3. Wait for the external SecureCheckout page to load. The URL should change away
+    #    from the FL portal (pas.fdot.gov) to the checkout provider. We poll the URL for
+    #    up to 30s. If it changes or a known checkout element appears, we're done.
+    print("  [PAY] Waiting for SecureCheckout to load...")
+    start_url = page.url
+    for wait_pass in range(1, 21):  # 20 * 1.5s = 30s
+        current_url = page.url
+        # Success markers:
+        #   - URL changed to a checkout provider (not pas.fdot.gov)
+        #   - A card-number input appears
+        if current_url != start_url and "pas.fdot.gov" not in current_url.lower():
+            print(f"  [PAY] SecureCheckout reached: {current_url}")
+            break
+        try:
+            cc_field = page.locator(
+                'input[name*="card"i], input[id*="card"i], '
+                'input[name*="ccnum"i], input[id*="ccnum"i], '
+                'input[autocomplete*="cc-number"i]'
+            )
+            if cc_field.count() > 0:
+                print(f"  [PAY] SecureCheckout reached (card field detected) at {current_url}")
+                break
+        except Exception:
+            pass
+        page.wait_for_timeout(1500)
+    else:
+        _fatal(page, f"SecureCheckout page did not load after 30s. URL still: {page.url}")
+
+    _screenshot(page, "secure_checkout_reached")
+    print("[STOP] =============================================")
+    print("[STOP] SecureCheckout page reached — stopping before card entry.")
+    print("[STOP] =============================================\n")
+
+
+def _save_and_route(page: Page, permit_type: str, extra: dict):
+    """Full post-save flow, branching by permit type:
+        os_ow (and legacy trip): Save → Routing tab → fill route → Generate → dismiss
+            disclaimer → Review & Submit tab → Submit → Online Payment → Secure Checkout
+        fl_blanket_*: Save → Review & Submit tab → Submit → Online Payment → Secure Checkout
+
+    All variants terminate at the external SecureCheckout page (we never enter card
+    details — those aren't stored on the frontend or backend)."""
     print("\n[ACT] Clicking Save...")
 
     try:
@@ -1375,60 +2104,29 @@ def _save_and_route(page: Page, permit_type: str = "trip"):
     _screenshot(page, "saved")
     print("[OK] Saved")
 
-    # FL Blanket variants skip routing entirely — they go straight to Review & Submit.
     is_blanket = permit_type.startswith("fl_blanket_")
-    tab_label = "Review & Submit" if is_blanket else "Routing"
-    tab_keywords = ["review"] if is_blanket else ["routing"]
+    has_routing = permit_type in ("os_ow", "trip")  # trip kept for history back-compat
 
-    print(f"\n[ACT] Clicking {tab_label}...")
-    # The target tab is a jQuery UI tab anchor (<a class="ui-tabs-anchor" tabindex="-1">).
-    # Playwright refuses to click because tabindex=-1 makes it "not enabled". Activate the
-    # tab directly via jQuery UI's tabs API, or failing that, dispatch a native click in JS.
-    try:
-        result = page.evaluate(
-            """(keywords) => {
-                // Strategy 1: jQuery UI tabs API — walk up from the target anchor to its .ui-tabs widget.
-                const anchors = Array.from(document.querySelectorAll('a.ui-tabs-anchor'));
-                const target = anchors.find(a => {
-                    const t = (a.textContent || '').toLowerCase();
-                    return keywords.every(k => t.includes(k));
-                });
-                if (!target) return {ok:false, err:'no_tab_anchor', anchors: anchors.map(a => (a.textContent || '').trim())};
-                if (typeof jQuery !== 'undefined') {
-                    let $tabs = jQuery(target).closest('.ui-tabs');
-                    if ($tabs.length && $tabs.tabs) {
-                        const panels = $tabs.find('> div[role="tabpanel"], > div.ui-tabs-panel');
-                        const panelId = target.getAttribute('href') || '';
-                        let idx = -1;
-                        $tabs.find('a.ui-tabs-anchor').each(function(i, a) {
-                            if (a === target) idx = i;
-                        });
-                        if (idx >= 0) {
-                            try { $tabs.tabs('option', 'active', idx); return {ok:true, via:'tabs_api', idx, panelId}; }
-                            catch (e) { /* fall through */ }
-                        }
-                    }
-                }
-                // Strategy 2: native click on the parent <li> (jQuery UI listens there too)
-                const li = target.closest('li');
-                if (li) { li.click(); return {ok:true, via:'li_click'}; }
-                // Strategy 3: direct anchor click bypassing focusable check
-                target.click();
-                return {ok:true, via:'anchor_click'};
-            }""",
-            tab_keywords,
-        )
-        if not result.get("ok"):
-            _fatal(page, f"Could not activate {tab_label} tab: {result}")
-        print(f'  [{tab_label.upper()}] Activated via {result.get("via")}')
-        page.wait_for_timeout(1500 if is_blanket else 2500)
-    except Exception as e:
-        _fatal(page, f"Could not click {tab_label}: {e}")
+    # Route-only step (OS/OW + legacy trip)
+    if has_routing:
+        _activate_tab(page, "Routing", ["routing"])
+        _fill_routing_fields(page, extra)
+        _click_generate_validated_route(page)
+        _dismiss_route_disclaimer(page)
 
-    _screenshot(page, "review_reached" if is_blanket else "routing_reached")
-    print("[STOP] =============================================")
-    print(f"[STOP] {tab_label} page reached — permit automation complete.")
-    print("[STOP] =============================================\n")
+    # All FL variants land on Review & Submit next.
+    _activate_tab(page, "Review & Submit", ["review"], settle_ms=1800)
+    _screenshot(page, "review_reached")
+
+    # Routing Disclaimer "Accept" checkbox — only exists on OS/OW (routing permits).
+    # Blanket permits skip straight to Submit with no disclaimer checkbox.
+    if has_routing:
+        _accept_routing_disclaimer(page)
+
+    # Submit → Payment tab → Online Payment radio → Secure Payment Gateway → SecureCheckout
+    _click_submit_on_review(page)
+    _activate_tab(page, "Payment", ["payment"], settle_ms=2000)
+    _proceed_to_secure_checkout(page)
 
 
 # ---------------------------------------------------------------------------
@@ -1521,8 +2219,9 @@ def run(
             _select_new_vehicle(page)
             _fill_vehicle_and_load(page, permit, extra, permit_type)
 
-            # Step 5: Save → Routing (or Review & Submit for FL blanket variants)
-            _save_and_route(page, permit_type)
+            # Step 5: Save → (Routing for OS/OW) → Review & Submit → Submit → Payment
+            #         → external SecureCheckout (where the script stops).
+            _save_and_route(page, permit_type, extra)
 
             screenshot_path = _screenshot(page, "complete")
 
@@ -1532,11 +2231,12 @@ def run(
                 "tractor": tractor,
                 "permitType": permit_type,
                 "status": "success",
-                "message": "Routing page reached — permit automation complete",
+                "message": "SecureCheckout page reached — stopping before card entry",
                 "screenshot": screenshot_path,
             }
 
         except PermitError as e:
+            # _fatal already printed [FATAL] and took an error screenshot.
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,
@@ -1547,13 +2247,26 @@ def run(
                 "screenshot": e.screenshot_path,
             }
         except Exception as e:
+            # Unhandled exception — print the full traceback so Celery shows WHERE
+            # it died instead of the task silently reporting "Done — 0/1 succeeded".
+            import traceback
+            print(f"\n  [UNEXPECTED] {type(e).__name__}: {e}")
+            print("  " + traceback.format_exc().replace("\n", "\n  "))
+            err_shot = ""
+            try:
+                err_shot = os.path.join(_screenshot_dir, f"UNEXPECTED_{int(time.time() * 1000)}.png")
+                page.screenshot(path=err_shot, full_page=True, timeout=10000)
+                print(f"  [UNEXPECTED] Error screenshot: {err_shot}")
+            except Exception:
+                err_shot = ""
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,
                 "tractor": tractor,
                 "permitType": permit_type,
                 "status": "error",
-                "message": f"Unexpected: {e}",
+                "message": f"Unexpected {type(e).__name__}: {e}",
+                "screenshot": err_shot,
             }
         finally:
             time.sleep(3)

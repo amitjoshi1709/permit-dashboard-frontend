@@ -255,6 +255,9 @@ def get_permit_history() -> list[dict]:
             "effDate": p.get("eff_date", ""),
             "expDate": p.get("exp_date", ""),
             "fee": p.get("fee", 0),
+            # JSONB column — contains the original POST extraFields payload (dimensions,
+            # axles, etc.) for FL/OS-OW permits. Null for simple trip/fuel permits.
+            "extraFields": p.get("extra_fields"),
         }
         for p in result.data
     ]

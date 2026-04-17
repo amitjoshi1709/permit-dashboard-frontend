@@ -121,6 +121,25 @@ _FL_FLATBED_EXTRA: list[dict] = [
      "placeholder": "Describe the load", "group": "Load Info"},
 ]
 
+# FL OS/OW routing step — only OS/OW has a routing tab with origin + destination.
+# Blankets skip this entirely. The portal's "Type" dropdown defaults to Address so
+# we don't expose that to the dispatcher; we only ask for Address / City / Zip
+# per endpoint. The two group names below are rendered as a side-by-side pair on
+# the frontend (see DynamicFields.jsx).
+_FL_OS_OW_ROUTING: list[dict] = [
+    {"key": "originAddress",      "label": "Address", "type": "text", "group": "Starting Location"},
+    {"key": "originCity",         "label": "City",    "type": "text", "group": "Starting Location"},
+    {"key": "originZip",          "label": "Zip",     "type": "text", "group": "Starting Location"},
+    {"key": "destinationAddress", "label": "Address", "type": "text", "group": "Destination Location"},
+    {"key": "destinationCity",    "label": "City",    "type": "text", "group": "Destination Location"},
+    {"key": "destinationZip",     "label": "Zip",     "type": "text", "group": "Destination Location"},
+]
+
+# FL OS/OW uses the same vehicle/dimension/load schema as the old FL trip flow —
+# the portal path is identical (still clicks "Trip" radio at the top) — plus the
+# routing fields above. FL no longer offers trip/fuel in the dashboard, but
+# ("FL", "trip") is kept below for backward-compatibility with history dupes.
+FIELD_SCHEMAS[("FL", "os_ow")]                    = _FL_COMMON + _FL_TRIP_EXTRA + _FL_OS_OW_ROUTING
 FIELD_SCHEMAS[("FL", "trip")]                     = _FL_COMMON + _FL_TRIP_EXTRA
 FIELD_SCHEMAS[("FL", "fl_blanket_bulk")]          = _FL_COMMON + _FL_BULK_EXTRA
 FIELD_SCHEMAS[("FL", "fl_blanket_inner_bridge")]  = (

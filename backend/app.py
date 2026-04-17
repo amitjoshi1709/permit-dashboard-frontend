@@ -1,4 +1,7 @@
 import uuid
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -166,7 +169,9 @@ def order_permits(body: PermitOrderRequest, _: str = Depends(require_auth)):
                 else:
                     usdot = driver.get("usdot", "")
 
-                # Supabase row — inserted as Pending before automation runs
+                # Supabase row — inserted as Pending before automation runs.
+                # `extra_fields` stores the exact POST payload (dimensions, axles, etc.)
+                # so the History "Duplicate" feature can resend identical values for FL.
                 permit_rows.append({
                     "id": permit_id,
                     "job_id": job_id,
@@ -178,6 +183,7 @@ def order_permits(body: PermitOrderRequest, _: str = Depends(require_auth)):
                     "status": "Pending",
                     "eff_date": body.effectiveDate or "",
                     "fee": 0,
+                    "extra_fields": body.extraFields,
                 })
 
                 permit_data = {

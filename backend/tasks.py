@@ -42,6 +42,10 @@ SCRIPT_REGISTRY = {
     ("GA", "fuel"):       run_georgia_tf,
     ("GA", "os_ow"):      run_georgia_osow,
     ("AR", None):         run_arkansas_trip,
+    # FL: OS/OW reuses the old trip-script path (still clicks "Trip" at the top of
+    # the portal). The trip/fuel/trip_fuel entries remain for back-compat so that
+    # already-submitted history rows can still be duplicated + re-run.
+    ("FL", "os_ow"):                   run_florida_trip,
     ("FL", "trip"):                    run_florida_trip,
     ("FL", "fuel"):                    run_florida_trip,
     ("FL", "trip_fuel"):               run_florida_trip,

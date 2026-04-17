@@ -141,6 +141,9 @@ export default function HistoryTable({ onNavigate, onToast }) {
       state: p.state || "",
       type: p.type || "",
       sourceId: p.id,
+      // Carry the exact dimensions/axles/etc. from the original submission so the
+      // duplicated permit re-runs with identical values (critical for FL blanket/OS-OW).
+      extraFields: p.extraFields || null,
     }));
     try {
       localStorage.setItem(PENDING_CART_KEY, JSON.stringify(payload));
