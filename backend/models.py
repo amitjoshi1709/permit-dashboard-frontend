@@ -25,6 +25,18 @@ class PermitOrderRequest(BaseModel):
     effectiveTime: Optional[str] = "12:00"
 
 
+class PaymentCardUpdate(BaseModel):
+    cardholderName: str
+    cardNumber: str
+    expMonth: str
+    expYear: str
+    cvv: str
+    billingStreet: Optional[str] = ""
+    billingCity: Optional[str] = ""
+    billingState: Optional[str] = ""
+    billingZip: Optional[str] = ""
+
+
 class CaptchaSolvedRequest(BaseModel):
     pass  # empty body, the signal is the POST itself
 

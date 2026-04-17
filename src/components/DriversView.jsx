@@ -200,6 +200,7 @@ export default function DriversView({ onToast }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [driverSearch, setDriverSearch] = useState("");
 
   // Mega insurance (shared across all F/LP/T drivers)
   const [megaInsurance, setMegaInsurance] = useState({
@@ -331,14 +332,42 @@ export default function DriversView({ onToast }) {
     if (editingId) cancelEdit();
   }
 
+  const q = driverSearch.trim().toLowerCase();
+  const filteredDrivers = q
+    ? drivers.filter((d) => {
+        const name = `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase();
+        const tractor = (d.tractor || "").toLowerCase();
+        const type = (d.driverType || "").toLowerCase();
+        const id = String(d.id || "");
+        return name.includes(q) || tractor.includes(q) || type.includes(q) || id.includes(q);
+      })
+    : drivers;
+
   return (
     <div className="bg-navy-2 border border-subtle rounded-[14px]">
       <div className="px-[18px] py-3.5 border-b border-subtle flex items-center gap-2.5">
         <div className="text-[13.5px] font-semibold">Driver Database</div>
         <span className="text-[11px] text-txt-3 bg-navy-3 rounded-[10px] px-2 py-0.5">
-          {drivers.length} drivers
+          {filteredDrivers.length}{q ? ` / ${drivers.length}` : ""} drivers
         </span>
         <div className="ml-auto flex gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={driverSearch}
+              onChange={(e) => setDriverSearch(e.target.value)}
+              placeholder="Search name, tractor, type..."
+              className="!w-[200px] !py-1.5 !px-2.5 !text-xs"
+            />
+            {driverSearch && (
+              <button
+                onClick={() => setDriverSearch("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-txt-3 hover:text-txt-1 bg-transparent border-none cursor-pointer text-sm leading-none"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <button
             onClick={load}
             className="text-xs text-txt-3 hover:text-accent-2 transition-colors cursor-pointer bg-transparent border-none font-sans"
@@ -447,10 +476,10 @@ export default function DriversView({ onToast }) {
       {/* Driver list */}
       {loading ? (
         <div className="p-10 text-center text-txt-3 text-[13px]">Loading...</div>
-      ) : drivers.length === 0 ? (
+      ) : filteredDrivers.length === 0 ? (
         <div className="text-center py-10 text-txt-3 text-[13px]">
-          <div className="text-[32px] mb-2.5">👤</div>
-          No drivers in the database.
+          <div className="text-[32px] mb-2.5">{q ? "🔍" : "👤"}</div>
+          {q ? "No drivers match your search." : "No drivers in the database."}
         </div>
       ) : (
         <table className="w-full border-collapse">
@@ -465,7 +494,7 @@ export default function DriversView({ onToast }) {
             </tr>
           </thead>
           <tbody>
-            {drivers.map((driver) => (
+            {filteredDrivers.map((driver) => (
               <>
                 <tr key={driver.id} className="hover:bg-navy-3/50 transition-colors">
                   <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-xs text-txt-3">{driver.id}</td>

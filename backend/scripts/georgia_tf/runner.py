@@ -495,6 +495,7 @@ def run(
     job_id: str,
     on_captcha_needed: Optional[Callable] = None,
     company: dict = None,
+    payment_card: dict = None,
 ) -> dict:
     """
     Run the Georgia trip/fuel permit automation for one driver.

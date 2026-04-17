@@ -7,3 +7,4 @@ playwright
 python-dotenv
 capsolver
 pyjwt
+cryptography

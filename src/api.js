@@ -195,3 +195,18 @@ export async function updateMegaInsurance(insurance) {
   });
   return res.json();
 }
+
+// ── Payment card (encrypted server-side) ─────────────────────────────
+export async function fetchPaymentCard() {
+  const res = await authFetch(`/api/settings/payment-card`);
+  return res.json();
+}
+
+export async function updatePaymentCard(card) {
+  const res = await authFetch(`/api/settings/payment-card`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(card),
+  });
+  return res.json();
+}

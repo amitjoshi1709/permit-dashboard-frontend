@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from models import (
     LoginRequest,
     MegaInsuranceRequest,
+    PaymentCardUpdate,
     PermitOrderRequest,
     PermitOrderResponse,
     DriverCreateRequest,
@@ -23,6 +24,8 @@ from database import (
     get_permit_history,
     get_mega_insurance,
     update_mega_insurance,
+    get_payment_card,
+    save_payment_card,
 )
 from tasks import run_permit_job, get_job_status, signal_captcha_solved
 from config import SUPPORTED_STATES, VALID_PERMIT_TYPES, COMPANY_TYPES, COMPANY_DRIVER_DEFAULTS
@@ -96,6 +99,21 @@ def delete_driver(driver_id: int, _: str = Depends(require_auth)):
     ok = soft_delete_driver(driver_id)
     if not ok:
         raise HTTPException(404, "Driver not found")
+    return {"success": True}
+
+
+# ── Payment Card (encrypted) ────────────────────────────────────────
+
+@app.get("/api/settings/payment-card")
+def read_payment_card(_: str = Depends(require_auth)):
+    return get_payment_card()
+
+
+@app.put("/api/settings/payment-card")
+def put_payment_card(body: PaymentCardUpdate, _: str = Depends(require_auth)):
+    card_data = body.model_dump()
+    card_data["cardNumber"] = card_data["cardNumber"].replace(" ", "")
+    save_payment_card(card_data)
     return {"success": True}
 
 

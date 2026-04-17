@@ -36,16 +36,6 @@ CONTACT = {
     "company_ref":      "MEGA TRUCKING LLC",
 }
 
-# Fake test card — matches the default in the dashboard Settings page.
-# These are NOT real credentials; 4242... is a standard Stripe test number.
-PAYMENT_CARD = {
-    "number":   "4242424242424242",
-    "exp_month": "12",
-    "exp_year":  "2028",
-    "cvv":       "123",
-    "name":      "Michael Caballero",
-}
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -716,8 +706,8 @@ def step_checkout_customer_next(page: Page) -> None:
     print("[OK] Advanced to payment info page")
 
 
-def step_fill_payment_info(page: Page) -> None:
-    """Step 15 — Fill credit card details on the payment info page. STOP before clicking Next."""
+def step_fill_payment_info(page: Page, payment_card: dict) -> None:
+    """Step 15 — Fill credit card details on the payment info page."""
     print("\n[STEP 15] Filling payment info...")
     print(f"  [INFO] Current URL: {page.url}")
 
@@ -787,7 +777,7 @@ def step_fill_payment_info(page: Page) -> None:
         'input[name*="ccNumber" i]', 'input[id*="CardNumber" i]',
         'input[id*="cardNumber" i]', 'input[id*="ccNumber" i]',
         'input[name*="card_number" i]', 'input[autocomplete="cc-number"]',
-    ], PAYMENT_CARD["number"], "Card Number")
+    ], payment_card["cardNumber"], "Card Number")
 
     # --- Expiration month (dropdown) ---
     _select_payment_field(target_frame, [
@@ -796,7 +786,7 @@ def step_fill_payment_info(page: Page) -> None:
         'select[name*="CardMonth" i]', 'select[name*="cardMonth" i]',
         'select[id*="ExpMonth" i]', 'select[id*="expirationMonth" i]',
         'select[name*="ccMonth" i]', 'select[autocomplete="cc-exp-month"]',
-    ], PAYMENT_CARD["exp_month"], "Expiration Month")
+    ], payment_card["expMonth"], "Expiration Month")
 
     # --- Expiration year (dropdown) ---
     _select_payment_field(target_frame, [
@@ -805,7 +795,7 @@ def step_fill_payment_info(page: Page) -> None:
         'select[name*="CardYear" i]', 'select[name*="cardYear" i]',
         'select[id*="ExpYear" i]', 'select[id*="expirationYear" i]',
         'select[name*="ccYear" i]', 'select[autocomplete="cc-exp-year"]',
-    ], PAYMENT_CARD["exp_year"], "Expiration Year")
+    ], payment_card["expYear"], "Expiration Year")
 
     # --- CVV / Security code ---
     _fill_payment_field(target_frame, [
@@ -815,7 +805,7 @@ def step_fill_payment_info(page: Page) -> None:
         'input[name*="CardCode" i]', 'input[id*="SecurityCode" i]',
         'input[id*="CVV" i]', 'input[id*="cvv" i]',
         'input[id*="CardCode" i]', 'input[autocomplete="cc-csc"]',
-    ], PAYMENT_CARD["cvv"], "Security Code")
+    ], payment_card["cvv"], "Security Code")
 
     # --- Name on card ---
     _fill_payment_field(target_frame, [
@@ -824,7 +814,7 @@ def step_fill_payment_info(page: Page) -> None:
         'input[name*="cardHolder" i]', 'input[name*="CardHolder" i]',
         'input[id*="NameOnCard" i]', 'input[id*="CardName" i]',
         'input[id*="cardHolder" i]', 'input[autocomplete="cc-name"]',
-    ], PAYMENT_CARD["name"], "Name on Card")
+    ], payment_card["cardholderName"], "Name on Card")
 
     print("[OK] Payment info filled")
 
@@ -900,6 +890,7 @@ def run(
     job_id: str,
     on_captcha_needed: Optional[Callable] = None,
     company: dict = None,
+    payment_card: dict = None,
 ) -> dict:
     driver = permit["driver"]
     driver_name = f"{driver['firstName']} {driver['lastName']}"
@@ -915,6 +906,8 @@ def run(
         errors.append("Missing tractor/unit number")
     if not effective_date:
         errors.append("Missing effectiveDate")
+    if not payment_card or not payment_card.get("cardNumber"):
+        errors.append("No payment card configured — go to Settings to add a card")
 
     if errors:
         return {
@@ -962,7 +955,7 @@ def run(
             step_pay_for_verified_permits(page)
             step_select_payment_method(page)
             step_checkout_customer_next(page)
-            step_fill_payment_info(page)
+            step_fill_payment_info(page, payment_card)
             step_payment_next_and_submit(page)
 
             return {

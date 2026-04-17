@@ -13,7 +13,7 @@ import os
 import redis
 from celery_app import celery
 from dotenv import load_dotenv
-from database import update_permit_status
+from database import update_permit_status, get_decrypted_payment_card
 
 load_dotenv()
 
@@ -154,6 +154,10 @@ def run_permit_job(self, job_id: str, permits: list):
     results = []
     set_job_status(job_id, "processing", results)
 
+    payment_card = get_decrypted_payment_card()
+    if not payment_card:
+        print(f"[task:{job_id}] WARNING: No payment card configured in settings")
+
     for permit in permits:
         state = permit["state"]
         permit_type = permit.get("permitType", "")
@@ -173,7 +177,7 @@ def run_permit_job(self, job_id: str, permits: list):
 
         try:
             captcha_cb = _make_captcha_callback(job_id, permit["permitId"], results)
-            result = runner(permit, job_id, on_captcha_needed=captcha_cb, company=COMPANY)
+            result = runner(permit, job_id, on_captcha_needed=captcha_cb, company=COMPANY, payment_card=payment_card)
             results.append(result)
 
             # Update Supabase: success → "Active" (reached payment page), error → "failed"

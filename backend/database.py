@@ -1,6 +1,8 @@
 import os
+from datetime import datetime, timezone
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from encryption import encrypt_card, decrypt_card
 
 load_dotenv()
 
@@ -258,3 +260,73 @@ def get_permit_history() -> list[dict]:
         }
         for p in result.data
     ]
+
+
+# ── Payment card (encrypted) ───────────────────────────────────────
+
+def _detect_brand(card_number: str) -> str:
+    n = card_number.replace(" ", "")
+    if n.startswith("4"):
+        return "VISA"
+    if n[:2] in ("51", "52", "53", "54", "55"):
+        return "MC"
+    if n[:2] in ("34", "37"):
+        return "AMEX"
+    if n.startswith("6011") or n.startswith("65"):
+        return "DISC"
+    return "CARD"
+
+
+def get_payment_card() -> dict:
+    """Fetch encrypted card from settings table, return MASKED version for the frontend."""
+    result = (
+        supabase.table("settings")
+        .select("value")
+        .eq("key", "payment_card")
+        .single()
+        .execute()
+    )
+    if not result.data or not result.data.get("value"):
+        return {"hasCard": False}
+
+    card = decrypt_card(result.data["value"])
+    digits = card.get("cardNumber", "").replace(" ", "")
+    last4 = digits[-4:] if len(digits) >= 4 else ""
+
+    return {
+        "hasCard": True,
+        "lastFour": last4,
+        "brand": _detect_brand(digits),
+        "cardholderName": card.get("cardholderName", ""),
+        "expMonth": card.get("expMonth", ""),
+        "expYear": card.get("expYear", ""),
+        "billingStreet": card.get("billingStreet", ""),
+        "billingCity": card.get("billingCity", ""),
+        "billingState": card.get("billingState", ""),
+        "billingZip": card.get("billingZip", ""),
+    }
+
+
+def save_payment_card(card_data: dict) -> bool:
+    """Encrypt card data and upsert into the settings table."""
+    ciphertext = encrypt_card(card_data)
+    supabase.table("settings").upsert({
+        "key": "payment_card",
+        "value": ciphertext,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return True
+
+
+def get_decrypted_payment_card() -> dict:
+    """Fetch and decrypt the FULL card for automation scripts. Never call from API endpoints."""
+    result = (
+        supabase.table("settings")
+        .select("value")
+        .eq("key", "payment_card")
+        .single()
+        .execute()
+    )
+    if not result.data or not result.data.get("value"):
+        return {}
+    return decrypt_card(result.data["value"])

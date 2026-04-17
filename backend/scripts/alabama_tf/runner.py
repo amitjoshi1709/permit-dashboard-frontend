@@ -593,7 +593,7 @@ def step_page3_vehicle_details(page: Page, data: dict) -> None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None, company: dict = None) -> dict:
+def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None, company: dict = None, payment_card: dict = None) -> dict:
     """
     Run the Alabama trip/fuel permit automation for one driver.
 
