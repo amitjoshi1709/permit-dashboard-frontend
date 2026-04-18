@@ -37,6 +37,8 @@ VALID_PERMIT_TYPES = {
     "trip_fuel", "os_ow", "trip", "fuel",
     # Florida-only blanket variants
     "fl_blanket_bulk", "fl_blanket_inner_bridge", "fl_blanket_flatbed",
+    # Alabama-only
+    "al_annual_osow",
 }
 
 # Georgia portal config

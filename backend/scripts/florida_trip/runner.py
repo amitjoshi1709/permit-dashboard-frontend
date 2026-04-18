@@ -21,7 +21,6 @@ Data flow:
 import os
 import time
 from datetime import datetime, timedelta, time as dtime
-from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -81,34 +80,7 @@ def _compute_flatbed_begin_date(now: Optional[datetime] = None) -> str:
 # ---------------------------------------------------------------------------
 
 class PermitError(Exception):
-    def __init__(self, message: str, screenshot_path: str = None):
-        super().__init__(message)
-        self.screenshot_path = screenshot_path
-
-
-# ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +88,9 @@ def _screenshot(page: Page, name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _fatal(page: Page, message: str):
-    """Take error screenshot then raise PermitError."""
+    """Log fatal message then raise PermitError."""
     print(f"\n  [FATAL] {message}")
-    err_screenshot = None
-    try:
-        err_screenshot = os.path.join(_screenshot_dir, f"ERROR_{int(time.time() * 1000)}.png")
-        page.screenshot(path=err_screenshot, full_page=True)
-        print(f"  [FATAL] Error screenshot saved: {err_screenshot}")
-    except Exception as e:
-        print(f"  [FATAL] Could not save error screenshot: {e}")
-    raise PermitError(message, err_screenshot)
+    raise PermitError(message)
 
 
 def _normalize(v: str) -> str:
@@ -235,7 +200,6 @@ def _login(page: Page, username: str, password: str):
     print("\n[ACT] Logging into Florida DOT portal...")
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(2000)
-    _screenshot(page, "login_page")
 
     # Fill username and password
     user_sel = 'input[name="UserName"], input#UserName'
@@ -283,7 +247,6 @@ def _login(page: Page, username: str, password: str):
     else:
         _fatal(page, "Login failed — still on login page after 45s. Check FL credentials or portal may be down.")
 
-    _screenshot(page, "login_success")
     print("[OK] Login successful")
 
     # Wait for the post-login dashboard to fully render before proceeding.
@@ -292,7 +255,6 @@ def _login(page: Page, username: str, password: str):
     print("  [POST-LOGIN] Waiting for dashboard to stabilize...")
     page.wait_for_load_state("networkidle", timeout=30000)
     page.wait_for_timeout(3000)
-    _screenshot(page, "post_login_dashboard")
     print("  [POST-LOGIN] Dashboard ready")
 
 
@@ -331,7 +293,6 @@ def _create_application(page: Page):
 
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(3000)
-    _screenshot(page, "create_application_clicked")
     print("[OK] Create Application page loaded")
 
 
@@ -418,8 +379,6 @@ def _fill_permittee_info(page: Page, company: dict, phone: str):
     except PlaywrightTimeoutError:
         print("  [WARN] Phone field not found")
 
-    _screenshot(page, "permittee_info_filled")
-
     # Check "Is invoice same as permittee?"
     print("\n[ACT] Checking 'Is invoice same as permittee?'...")
     invoice_check_sel = 'input[name*="InvoiceSame"], input[name*="invoice"], input[id*="InvoiceSame"], input[type="checkbox"]'
@@ -447,8 +406,6 @@ def _fill_permittee_info(page: Page, company: dict, phone: str):
     except Exception as e:
         print(f"  [WARN] Could not find invoice checkbox: {e}")
 
-    _screenshot(page, "invoice_checkbox_checked")
-
     # Verify Address button
     print("\n[ACT] Clicking Verify Address...")
     try:
@@ -456,7 +413,6 @@ def _fill_permittee_info(page: Page, company: dict, phone: str):
         if verify_btn.count() > 0:
             verify_btn.first.click()
             page.wait_for_timeout(3000)
-            _screenshot(page, "address_verified")
             print("  [OK] Address verified")
         else:
             print("  [WARN] Verify Address button not found — skipping")
@@ -473,7 +429,6 @@ def _fill_permittee_info(page: Page, company: dict, phone: str):
     except Exception as e:
         _fatal(page, f"Could not click Continue after permittee info: {e}")
 
-    _screenshot(page, "permittee_continue")
     print("[OK] Permittee page complete — moved to permit details")
 
 
@@ -537,7 +492,6 @@ def _fill_permit_type_and_dates(page: Page, permit_type: str, effective_date: st
     except PlaywrightTimeoutError:
         pass
 
-    _screenshot(page, "permit_type_selected")
     print("[OK] Permit type and dates set")
 
 
@@ -613,8 +567,6 @@ def _select_new_vehicle(page: Page):
     field_count = page.locator('input:visible, select:visible, textarea:visible').count()
     print(f"  [DEBUG] Visible form fields after wait: {field_count}")
 
-    _screenshot(page, "new_vehicle_selected")
-
     if field_count < 10:
         print("  [WARN] Few fields detected — trying click-based approach...")
         # Fallback: physically click the dropdown and the option
@@ -632,7 +584,6 @@ def _select_new_vehicle(page: Page):
 
                 field_count = page.locator('input:visible, select:visible, textarea:visible').count()
                 print(f"  [DEBUG] Fields after click fallback: {field_count}")
-                _screenshot(page, "new_vehicle_fallback")
                 break
 
     print("[OK] New Vehicle selected — vehicle/load fields rendered")
@@ -911,7 +862,6 @@ def _fill_vehicle_and_load(page: Page, permit: dict, extra: dict, permit_type: s
 
     _dump_page_fields(page)
     _debug_probe(page)
-    _screenshot(page, "fields_debug_dump")
 
     if not extra:
         print("  [WARN] No extraFields provided — nothing to fill")
@@ -1233,7 +1183,6 @@ def _fill_vehicle_and_load(page: Page, permit: dict, extra: dict, permit_type: s
         else:
             print("  [WARN] Load Description field not found on page (nothing visible near label)")
 
-    _screenshot(page, "load_fields_filled")
 
     # ── 5. Axle Count ──
     # FL renders this as an unlabeled <input> whose cell's text contains "Number of Axles:".
@@ -1351,7 +1300,6 @@ def _fill_vehicle_and_load(page: Page, permit: dict, extra: dict, permit_type: s
             else:
                 _fatal(page, f'Axle {i+1} Weight never committed correctly after {FILL_RETRIES} attempts. Expected "{expected}", portal shows "{last_actual}".')
 
-    _screenshot(page, "all_fields_filled")
     print("[OK] Vehicle and load details complete")
 
 
@@ -1372,7 +1320,6 @@ def _save_and_route(page: Page, permit_type: str = "trip"):
     except Exception as e:
         _fatal(page, f"Could not click Save: {e}")
 
-    _screenshot(page, "saved")
     print("[OK] Saved")
 
     # FL Blanket variants skip routing entirely — they go straight to Review & Submit.
@@ -1425,7 +1372,6 @@ def _save_and_route(page: Page, permit_type: str = "trip"):
     except Exception as e:
         _fatal(page, f"Could not click {tab_label}: {e}")
 
-    _screenshot(page, "review_reached" if is_blanket else "routing_reached")
     print("[STOP] =============================================")
     print(f"[STOP] {tab_label} page reached — permit automation complete.")
     print("[STOP] =============================================\n")
@@ -1447,7 +1393,7 @@ def run(
 
     Args:
         permit:            Enriched permit dict from the backend.
-        job_id:            The parent job ID (for logging/screenshots).
+        job_id:            The parent job ID (for logging).
         on_captcha_needed: Callback if CAPTCHA appears.
         company:           Company constants dict from config.py.
 
@@ -1485,7 +1431,6 @@ def run(
     if extra:
         print(f"[Florida] Extra fields: {list(extra.keys())}")
 
-    _reset_screenshots(job_id)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -1525,7 +1470,6 @@ def run(
             # Step 5: Save → Routing (or Review & Submit for FL blanket variants)
             _save_and_route(page, permit_type)
 
-            screenshot_path = _screenshot(page, "complete")
 
             return {
                 "permitId": permit_id,
@@ -1534,7 +1478,6 @@ def run(
                 "permitType": permit_type,
                 "status": "success",
                 "message": "Routing page reached — permit automation complete",
-                "screenshot": screenshot_path,
             }
 
         except PermitError as e:
@@ -1545,7 +1488,6 @@ def run(
                 "permitType": permit_type,
                 "status": "error",
                 "message": str(e),
-                "screenshot": e.screenshot_path,
             }
         except Exception as e:
             return {

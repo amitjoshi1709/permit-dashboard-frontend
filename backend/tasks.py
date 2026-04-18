@@ -24,7 +24,7 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 
 from config import COMPANY
 from scripts.alabama_tf.runner import run as run_alabama_tf
-from scripts.alabama_osow.runner import run as run_alabama_osow
+from scripts.alabama_annual_osow.runner import run as run_alabama_annual_osow
 from scripts.georgia_tf.runner import run as run_georgia_tf
 from scripts.georgia_osow.runner import run as run_georgia_osow
 from scripts.arkansas_trip.runner import run as run_arkansas_trip
@@ -37,7 +37,8 @@ SCRIPT_REGISTRY = {
     ("AL", "trip_fuel"): run_alabama_tf,
     ("AL", "trip"):      run_alabama_tf,
     ("AL", "fuel"):      run_alabama_tf,
-    ("AL", "os_ow"):     run_alabama_osow,
+    ("AL", "os_ow"):          run_alabama_annual_osow,
+    ("AL", "al_annual_osow"): run_alabama_annual_osow,
     ("GA", "trip_fuel"):  run_georgia_tf,
     ("GA", "trip"):       run_georgia_tf,
     ("GA", "fuel"):       run_georgia_tf,

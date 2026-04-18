@@ -121,10 +121,15 @@ export default function OrderForm({ onToast }) {
   }, []);
 
   // Permit types available for the currently selected state.
-  // FL-only types (`fl_*`) are hidden unless Florida is selected.
+  // State-specific permit types are hidden unless that state is selected.
   const availablePermitTypes = useMemo(() => {
     const isFL = selectedState === "FL";
-    return PERMIT_TYPES.filter((pt) => !pt.value.startsWith("fl_") || isFL);
+    const isAL = selectedState === "AL";
+    return PERMIT_TYPES.filter((pt) => {
+      if (pt.value.startsWith("fl_")) return isFL;
+      if (pt.value.startsWith("al_")) return isAL;
+      return true;
+    });
   }, [selectedState]);
 
   // Reset stale permit type selection when state changes
@@ -136,6 +141,10 @@ export default function OrderForm({ onToast }) {
 
   // Flatbed requires a reminder that travel begin date must be 2 work days out
   const isFlatbed = permitType === "fl_blanket_flatbed";
+
+  // Georgia has a 45-minute cooldown between permit purchases
+  const isGA = selectedState === "GA";
+  const cartHasGA = queue.some((e) => e.state === "GA");
 
   // Insurance is only required by Georgia right now.
   const insuranceRequired = selectedState === "GA";
@@ -545,6 +554,15 @@ export default function OrderForm({ onToast }) {
 
   async function handleSubmitQueue() {
     if (queue.length === 0) return;
+
+    if (cartHasGA) {
+      const ok = confirm(
+        "Your cart includes Georgia permits. After ordering, the GA portal will lock you out for 45 minutes.\n\n" +
+        "Are you sure you've added ALL Georgia permits you need?"
+      );
+      if (!ok) return;
+    }
+
     setSubmitting(true);
     // Snapshot for re-queue — deep-copy so later mutations can't affect it.
     setLastBatch(queue.map((e) => ({
@@ -654,9 +672,9 @@ export default function OrderForm({ onToast }) {
       </div>
 
       <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           {/* Left column — form */}
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* State selector — single dropdown */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
@@ -672,6 +690,12 @@ export default function OrderForm({ onToast }) {
                   <option key={st.code} value={st.code}>{st.code} — {st.label}</option>
                 ))}
               </select>
+              {isGA && (
+                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-1.5">
+                  <span className="flex-shrink-0 mt-px">{"\u26a0"}</span>
+                  <span>Georgia enforces a <strong>45-minute cooldown</strong> between permit purchases. Add all GA drivers/permits to the cart before ordering — you won't be able to order more until the cooldown expires.</span>
+                </div>
+              )}
             </div>
 
             {/* Permit Type */}
@@ -711,9 +735,6 @@ export default function OrderForm({ onToast }) {
                   className="!w-[130px]"
                   placeholder="Optional"
                 />
-              </div>
-              <div className="text-[10px] text-txt-3 mt-1">
-                Time is optional — only used by portals that support it (e.g. Georgia ITP).
               </div>
               {isFlatbed && (
                 <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166]">
@@ -908,16 +929,10 @@ export default function OrderForm({ onToast }) {
             >
               + Add to Cart
             </button>
-
-            {/* Payment boundary notice */}
-            <div className="rounded-lg px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-2">
-              <span className="text-sm flex-shrink-0 mt-px">{"\u26a0"}</span>
-              <span>Automation stops before payment. You will complete checkout manually.</span>
-            </div>
           </div>
 
-          {/* Right column — queue + submit + log */}
-          <div className="space-y-5">
+          {/* Right column — cart + order + tracker */}
+          <div className="space-y-4">
             {/* Cart list */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
@@ -925,7 +940,7 @@ export default function OrderForm({ onToast }) {
               </label>
 
               {queue.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-subtle px-4 py-8 text-center">
+                <div className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center">
                   <div className="text-txt-3 text-[12px]">Your cart is empty.</div>
                   <div className="text-txt-3 text-[11px] mt-1 opacity-60">Fill out the form and click "Add to Cart"</div>
                 </div>
@@ -996,11 +1011,13 @@ export default function OrderForm({ onToast }) {
                 : "Cart is empty"}
             </button>
 
-            <div className="text-[11px] text-txt-3 text-center -mt-2">
-              Each item in your cart will be processed as a separate job.
-            </div>
+            {cartHasGA && !busy && (
+              <div className="text-[11px] px-3 py-2 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-1.5">
+                <span className="flex-shrink-0 mt-px">{"\u26a0"}</span>
+                <span>Your cart includes Georgia permits. Make sure <strong>all GA permits</strong> are in the cart — the portal locks you out for 45 minutes after ordering.</span>
+              </div>
+            )}
 
-            {/* Re-add last order to the cart */}
             {lastBatch.length > 0 && (
               <button
                 onClick={requeueLastBatch}
@@ -1022,7 +1039,6 @@ export default function OrderForm({ onToast }) {
               </button>
             )}
 
-            {/* Job tracker replaces the old terminal log */}
             <JobTracker
               jobs={jobs}
               onClear={() => {

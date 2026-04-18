@@ -9,7 +9,7 @@ Data flow:
   Backend builds permit dict (driver details from Supabase + company constants)
   → run() converts it to the flat field dict the form steps expect
   → Step functions fill the Alabama portal form
-  → Stops before payment
+  → Proceeds through payment on NIC USA secure checkout
 """
 
 import os
@@ -590,6 +590,408 @@ def step_page3_vehicle_details(page: Page, data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Payment flow (Alabama TAP → NIC USA secure checkout)
+# ---------------------------------------------------------------------------
+
+CHECKOUT_CUSTOMER = {
+    "country":    "United States",
+    "first_name": "Erick",
+    "last_name":  "Rodriguez",
+    "address":    "5979 NW 151 ST Suite 101",
+    "city":       "Miami Lakes",
+    "state":      "FL - Florida",
+    "zip":        "33014",
+    "phone":      "786-332-5691",
+    "email":      "info@megatruckingllc.com",
+}
+
+
+def _wait(page: Page, ms: int = 1500) -> None:
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=15_000)
+    except PlaywrightTimeoutError:
+        pass
+    time.sleep(ms / 1000)
+
+
+def _click_next_checkout(page: Page, label: str) -> None:
+    """Click the Next button on NIC USA secure checkout pages."""
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    _wait(page, 1000)
+
+    for attempt in [
+        lambda: page.get_by_role("button", name="Next").click(timeout=3_000),
+        lambda: page.get_by_role("link", name="Next").click(timeout=3_000),
+        lambda: page.locator('text="Next"').first.click(timeout=3_000),
+        lambda: page.locator(':text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('a:has-text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Next"]').first.click(timeout=3_000),
+        lambda: page.locator('input[type="submit"]').first.click(timeout=3_000),
+    ]:
+        try:
+            attempt()
+            print(f'  [CLICK] Next on {label}')
+            return
+        except Exception:
+            continue
+
+    try:
+        all_els = page.locator('*').all()
+        for el in all_els:
+            try:
+                if not el.is_visible():
+                    continue
+                text = el.inner_text().strip()
+                if text in ("Next", "Next >", "Next ›"):
+                    el.click()
+                    print(f'  [CLICK] Next via element with text "{text}"')
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+    raise Exception(f"Could not find Next button on {label}")
+
+
+def _fill_payment_field(frame, selectors: list[str], value: str, label: str) -> bool:
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                loc.click(click_count=3)
+                loc.fill(value)
+                print(f'  [FILL] {label}: "{value}" via {sel}')
+                return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not fill {label}')
+    return False
+
+
+def _select_payment_field(frame, selectors: list[str], value: str, label: str) -> bool:
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                opts = loc.evaluate(
+                    "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                )
+                val_lower = value.lower()
+                for o in opts:
+                    if o["value"] == value or o["text"] == value:
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" via {sel}')
+                        return True
+                for o in opts:
+                    if val_lower in o["value"].lower() or val_lower in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" (fuzzy) via {sel}')
+                        return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not select {label}')
+    return False
+
+
+def step_payment_select_credit_card(page: Page) -> None:
+    """On the Alabama payment options page, select the Credit Card radio button then Next."""
+    print("\n[PAYMENT 1] Selecting Credit Card payment option...")
+
+    _wait(page, 2000)
+
+    # The page has two radio buttons: "Bank Account" (first) and "Credit Card" (second).
+    # We need the SECOND radio button specifically.
+    selected = False
+
+    # Try clicking the label text for Credit Card to trigger the radio
+    try:
+        # Find the radio button that is a sibling/near "Credit Card" text
+        cc_label = page.locator('text="Credit Card"').first
+        # Click slightly to the left of the label to hit the radio
+        cc_label.click(timeout=5_000)
+        print('  [CLICK] Credit Card via label text')
+        selected = True
+    except Exception:
+        pass
+
+    if not selected:
+        # Try the second radio button directly
+        try:
+            radios = page.locator('input[type="radio"]').all()
+            if len(radios) >= 2:
+                radios[1].check()
+                print('  [CLICK] Credit Card via second radio button')
+                selected = True
+            elif len(radios) == 1:
+                radios[0].check()
+                print('  [CLICK] Credit Card via only radio button')
+                selected = True
+        except Exception:
+            pass
+
+    if not selected:
+        raise Exception("Could not find Credit Card payment option")
+
+    _wait(page, 1000)
+    click_next(page)
+    _wait(page, 2000)
+    print("[OK] Credit Card selected")
+
+
+def step_payment_next_page(page: Page) -> None:
+    """Click Next on the intermediate page before signature."""
+    print("\n[PAYMENT 2] Clicking Next on intermediate page...")
+    _wait(page, 1500)
+    click_next(page)
+    _wait(page, 2000)
+    print("[OK] Advanced past intermediate page")
+
+
+def step_payment_signature(page: Page) -> None:
+    """Enter signature on the signature page."""
+    signer = "Michael Caballero"
+    print(f'\n[PAYMENT 3] Entering signature: "{signer}"...')
+
+    _wait(page, 1500)
+
+    signed = False
+    for sel in [
+        'input[name*="Signature" i]', 'input[name*="signature" i]',
+        'input[id*="Signature" i]', 'input[id*="signature" i]',
+        'input[name*="SignName" i]', 'input[name*="FullName" i]',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                loc.fill(signer)
+                print(f'  [FILL] Signature: "{signer}" via {sel}')
+                signed = True
+                break
+        except Exception:
+            continue
+
+    if not signed:
+        for label in ["Signature", "Sign", "Full Name", "Name", "Electronic Signature"]:
+            try:
+                loc = page.get_by_label(label, exact=False)
+                if loc.count() > 0 and loc.first.is_visible():
+                    loc.first.fill(signer)
+                    print(f'  [FILL] Signature: "{signer}" via label "{label}"')
+                    signed = True
+                    break
+            except Exception:
+                continue
+
+    if not signed:
+        inputs = page.locator('input[type="text"]').all()
+        for inp in inputs:
+            try:
+                if inp.is_visible() and not inp.input_value().strip():
+                    inp.fill(signer)
+                    print(f'  [FILL] Signature: "{signer}" via first empty text input')
+                    signed = True
+                    break
+            except Exception:
+                continue
+
+    if not signed:
+        print('  [WARN] Could not find signature field')
+
+    # Click "Pay" button (not Next) on this page
+    for sel in [
+        'button:has-text("Pay")', 'input[value="Pay"]',
+        'a:has-text("Pay")', 'button:has-text("pay")',
+        'input[type="submit"][value*="Pay"]',
+    ]:
+        try:
+            page.locator(sel).first.click(timeout=8_000)
+            print(f'  [CLICK] Pay via {sel}')
+            break
+        except Exception:
+            continue
+    else:
+        click_next(page)
+
+    _wait(page, 3000)
+    print("[OK] Signature entered, proceeding to checkout")
+
+
+def step_checkout_fill_customer(page: Page) -> None:
+    """Fill customer info on the NIC USA secure checkout page, then click Next."""
+    print("\n[PAYMENT 4] Filling checkout customer info...")
+    print(f"  [INFO] Current URL: {page.url}")
+
+    _wait(page, 5000)
+
+    # Auto-accept any JS dialogs on this page
+    page.on("dialog", lambda dialog: dialog.accept())
+
+    # Fill customer fields by label
+    field_map = [
+        ("First Name",    CHECKOUT_CUSTOMER["first_name"]),
+        ("Last Name",     CHECKOUT_CUSTOMER["last_name"]),
+        ("Address",       CHECKOUT_CUSTOMER["address"]),
+        ("City",          CHECKOUT_CUSTOMER["city"]),
+        ("ZIP",           CHECKOUT_CUSTOMER["zip"]),
+        ("Zip",           CHECKOUT_CUSTOMER["zip"]),
+        ("Phone",         CHECKOUT_CUSTOMER["phone"]),
+        ("Email",         CHECKOUT_CUSTOMER["email"]),
+    ]
+    for label, value in field_map:
+        try:
+            loc = page.get_by_label(label, exact=False)
+            if loc.count() > 0 and loc.first.is_visible():
+                loc.first.fill("")
+                loc.first.fill(value)
+                print(f'  [FILL] {label}: "{value}"')
+        except Exception:
+            pass
+
+    # Country dropdown
+    for sel in ['select[name*="Country" i]', 'select[id*="Country" i]']:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                opts = loc.evaluate(
+                    "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                )
+                for o in opts:
+                    if "united states" in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] Country: "{o["text"]}"')
+                        break
+                break
+        except Exception:
+            continue
+
+    # State dropdown
+    for sel in ['select[name*="State" i]', 'select[id*="State" i]']:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                opts = loc.evaluate(
+                    "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                )
+                target = CHECKOUT_CUSTOMER["state"].lower()
+                for o in opts:
+                    if target in o["text"].lower() or "florida" in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] State: "{o["text"]}"')
+                        break
+                break
+        except Exception:
+            continue
+
+    _wait(page, 1000)
+    _click_next_checkout(page, "customer info")
+    _wait(page, 3000)
+    print("[OK] Customer info filled")
+
+
+def step_checkout_fill_card(page: Page, payment_card: dict) -> None:
+    """Fill credit card details on the NIC USA payment info page."""
+    print("\n[PAYMENT 5] Filling payment card info...")
+
+    _wait(page, 2000)
+
+    target_frame = page
+    card_found = False
+    for sel in [
+        'input[name*="CardNumber" i]', 'input[id*="CardNumber" i]',
+        'input[name*="ccNumber" i]', 'input[autocomplete="cc-number"]',
+    ]:
+        try:
+            if page.locator(sel).first.is_visible(timeout=2_000):
+                card_found = True
+                break
+        except Exception:
+            continue
+
+    if not card_found:
+        for frame in page.frames:
+            if frame == page.main_frame:
+                continue
+            try:
+                for sel in ['input[name*="CardNumber" i]', 'input[id*="CardNumber" i]', 'input[type="tel"]']:
+                    if frame.locator(sel).first.is_visible(timeout=2_000):
+                        target_frame = frame
+                        card_found = True
+                        print(f'  [INFO] Card fields in iframe: {frame.url[:60]}')
+                        break
+                if card_found:
+                    break
+            except Exception:
+                continue
+
+    _fill_payment_field(target_frame, [
+        'input[name*="CardNumber" i]', 'input[id*="CardNumber" i]',
+        'input[name*="ccNumber" i]', 'input[name*="card_number" i]',
+        'input[autocomplete="cc-number"]',
+    ], payment_card["cardNumber"], "Card Number")
+
+    _select_payment_field(target_frame, [
+        'select[name*="ExpMonth" i]', 'select[id*="ExpMonth" i]',
+        'select[name*="ExpirationMonth" i]', 'select[name*="ccMonth" i]',
+        'select[autocomplete="cc-exp-month"]',
+    ], payment_card["expMonth"], "Expiration Month")
+
+    _select_payment_field(target_frame, [
+        'select[name*="ExpYear" i]', 'select[id*="ExpYear" i]',
+        'select[name*="ExpirationYear" i]', 'select[name*="ccYear" i]',
+        'select[autocomplete="cc-exp-year"]',
+    ], payment_card["expYear"], "Expiration Year")
+
+    _fill_payment_field(target_frame, [
+        'input[name*="SecurityCode" i]', 'input[name*="CVV" i]',
+        'input[name*="CVC" i]', 'input[name*="CardCode" i]',
+        'input[id*="SecurityCode" i]', 'input[id*="CVV" i]',
+        'input[autocomplete="cc-csc"]',
+    ], payment_card["cvv"], "Security Code")
+
+    _fill_payment_field(target_frame, [
+        'input[name*="NameOnCard" i]', 'input[name*="CardName" i]',
+        'input[name*="cardHolder" i]', 'input[id*="NameOnCard" i]',
+        'input[autocomplete="cc-name"]',
+    ], payment_card["cardholderName"], "Name on Card")
+
+    print("[OK] Card info filled")
+
+
+def step_checkout_submit(page: Page) -> None:
+    """Click Next on card page, then Submit Payment."""
+    print("\n[PAYMENT 6] Submitting payment...")
+
+    _click_next_checkout(page, "payment info page")
+    _wait(page, 3000)
+
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    _wait(page, 1000)
+
+    for attempt in [
+        lambda: page.get_by_role("button", name="Submit Payment").click(timeout=3_000),
+        lambda: page.get_by_role("link", name="Submit Payment").click(timeout=3_000),
+        lambda: page.locator('text="Submit Payment"').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Submit Payment")').first.click(timeout=3_000),
+        lambda: page.locator('a:has-text("Submit Payment")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Submit Payment"]').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Submit")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Submit"]').first.click(timeout=3_000),
+    ]:
+        try:
+            attempt()
+            print('  [CLICK] Submit Payment')
+            break
+        except Exception:
+            continue
+    else:
+        raise Exception("Could not find Submit Payment button")
+
+    _wait(page, 5000)
+    print("[OK] Payment submitted")
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -618,6 +1020,13 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
     permit_id = permit["permitId"]
     permit_type = permit.get("permitType", "")
 
+    if not payment_card or not payment_card.get("cardNumber"):
+        return {
+            "permitId": permit_id, "driverName": driver_name,
+            "tractor": tractor, "permitType": permit_type,
+            "status": "error", "message": "No payment card configured — go to Settings to add a card",
+        }
+
     # Build the flat form data dict from permit + company constants
     data = build_form_data(permit, COMPANY)
     print(f"[Alabama] Starting permit {permit_id} for {driver_name} ({tractor})")
@@ -636,6 +1045,9 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
         page = context.new_page()
         page.set_default_timeout(TIMEOUT)
 
+        # Auto-accept JS alert/confirm dialogs
+        page.on("dialog", lambda dialog: dialog.accept())
+
         try:
             step_navigate(page)
             step_click_permit_link(page)
@@ -649,7 +1061,6 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
                 print("  [CAPTCHA] CapSolver failed — waiting for manual solve")
                 if on_captcha_needed:
                     on_captcha_needed()
-                # Wait for manual solve
                 timeout_s = 300
                 start = time.time()
                 while time.time() - start < timeout_s:
@@ -671,40 +1082,23 @@ def run(permit: dict, job_id: str, on_captcha_needed: Optional[Callable] = None,
             time.sleep(1)
             click_next(page)
 
-            # --- Continue with form filling ---
-            if is_payment_page(page):
-                print(f"[Alabama] Reached payment page early — stopping.")
-                return {
-                    "permitId": permit_id, "driverName": driver_name,
-                    "tractor": tractor, "permitType": permit_type,
-                    "status": "success", "message": "Reached payment page",
-                }
-
+            # --- Form filling ---
             step_page1_identification(page, data)
-
-            if is_payment_page(page):
-                return {
-                    "permitId": permit_id, "driverName": driver_name,
-                    "tractor": tractor, "permitType": permit_type,
-                    "status": "success", "message": "Reached payment page",
-                }
-
             step_page2_mailing_address(page, data)
-
-            if is_payment_page(page):
-                return {
-                    "permitId": permit_id, "driverName": driver_name,
-                    "tractor": tractor, "permitType": permit_type,
-                    "status": "success", "message": "Reached payment page",
-                }
-
             step_page3_vehicle_details(page, data)
 
-            print(f"\n[Alabama] Reached payment page — stopping as requested.")
+            # --- Payment flow ---
+            step_payment_select_credit_card(page)
+            step_payment_next_page(page)
+            step_payment_signature(page)
+            step_checkout_fill_customer(page)
+            step_checkout_fill_card(page, payment_card)
+            step_checkout_submit(page)
+
             return {
                 "permitId": permit_id, "driverName": driver_name,
                 "tractor": tractor, "permitType": permit_type,
-                "status": "success", "message": "Reached payment page",
+                "status": "success", "message": "Payment submitted",
             }
 
         except Exception as e:

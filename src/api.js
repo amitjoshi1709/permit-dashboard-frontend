@@ -82,6 +82,8 @@ export const PERMIT_TYPES = [
   { value: "fl_blanket_bulk",         label: "FL Blanket Bulk" },
   { value: "fl_blanket_inner_bridge", label: "FL Blanket Inner Bridge" },
   { value: "fl_blanket_flatbed",      label: "FL Blanket Flatbed" },
+  // Alabama-only — gated to AL in OrderForm
+  { value: "al_annual_osow",          label: "AL Annual OS/OW" },
 ];
 
 // ── Driver type constants ─────────────────────────────────────────────

@@ -13,6 +13,7 @@ const PERMIT_TYPE_LABELS = {
   fl_blanket_bulk: "FL Blanket — Bulk",
   fl_blanket_inner_bridge: "FL Blanket — Inner Bridge",
   fl_blanket_flatbed: "FL Blanket — Flatbed",
+  al_annual_osow: "AL Annual OS/OW",
   // Portal-specific legacy labels
   ITP: "Trip (ITP)",
   MFTP: "Fuel (MFTP)",

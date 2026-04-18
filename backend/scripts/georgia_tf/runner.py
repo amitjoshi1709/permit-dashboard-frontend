@@ -83,6 +83,7 @@ SELECTORS = {
     },
     "add_to_cart": {
         "proceed":          'input[value="Proceed"]',
+        "add":              'input[value="Add to Cart"]',
     },
 }
 
@@ -455,27 +456,76 @@ def _fill_operator_details(page: Page):
     print("[VERIFY] Operator Details section complete")
 
 
-def _click_proceed_to_payment(page: Page):
-    """
-    Click the Proceed button to advance to the payment page.
-    Does NOT interact with anything on the payment page.
-    """
-    print("\n[ACT] Clicking Proceed to advance to payment page...")
-    proceed_btn = page.locator(SELECTORS["add_to_cart"]["proceed"]).first
+def _click_proceed_then_add_to_cart(page: Page):
+    """Click Proceed to go to the review/cart page, then click Add to Cart."""
+    # Auto-accept any JS dialogs that Proceed might trigger
+    page.on("dialog", lambda dialog: dialog.accept())
+
+    # Step 1: Click Proceed
+    print("\n[ACT] Clicking Proceed...")
+    proceed_btn = page.locator('#btnProceed, input[value="Proceed"]').first
     proceed_btn.wait_for(state="visible", timeout=10_000)
     proceed_btn.click()
+    print("[OK] Proceed clicked")
 
-    # Wait for payment page to load (URL change or new content)
     page.wait_for_load_state("networkidle", timeout=15_000)
-    time.sleep(2)  # Brief pause to let the payment page fully render
+    time.sleep(3)
 
-    print("[STOP] =============================================")
-    print("[STOP] Payment page reached — NOT entering payment.")
-    print("[STOP] =============================================\n")
+    # Check what page we're on now
+    print(f"  [INFO] URL after Proceed: {page.url}")
+
+    # Step 2: Look for Add to Cart on the new page
+    print("\n[ACT] Looking for Add to Cart...")
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+
+    # Debug: dump all visible buttons so we can see what's available
+    print("  [DEBUG] Visible buttons:")
+    for tag_sel in ['input[type="submit"]', 'input[type="button"]', "button", "a"]:
+        for el in page.locator(tag_sel).all():
+            try:
+                if not el.is_visible():
+                    continue
+                val = el.get_attribute("value") or ""
+                text = ""
+                try:
+                    text = el.inner_text().strip()[:40]
+                except Exception:
+                    pass
+                id_ = el.get_attribute("id") or ""
+                if val or text:
+                    print(f"    val={val!r:25s} text={text!r:25s} id={id_!r}")
+            except Exception:
+                pass
+
+    for sel in [
+        'input[value="Add to Cart"]',
+        'input[value="Add To Cart"]',
+        'input[value="ADD TO CART"]',
+        'button:has-text("Add to Cart")',
+        'a:has-text("Add to Cart")',
+        'input[value*="Cart" i]',
+        'button:has-text("Cart")',
+        '#btnAddToCart',
+        'input[value*="Add" i]',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                loc.click()
+                print(f'  [CLICK] Add to Cart via {sel}')
+                page.wait_for_load_state("networkidle", timeout=15_000)
+                time.sleep(2)
+                print("[OK] Added to cart")
+                return
+        except Exception:
+            continue
+
+    _fatal(page, "Could not find Add to Cart button — check debug dump above")
 
 
 def _fill_one_permit_form(page: Page, data: dict) -> None:
-    """Fill one complete permit form (all sections), stop at payment page."""
+    """Fill one complete permit form (all sections) and add to cart."""
     _navigate_to_generate_trip_permit(page)
     _enter_account_number(page, data["account_no"])
     _fill_permit_details(page, data)
@@ -483,7 +533,448 @@ def _fill_one_permit_form(page: Page, data: dict) -> None:
     _fill_vehicle_details(page, data)
     _fill_insurance_details(page, data)
     _fill_operator_details(page)
-    _click_proceed_to_payment(page)
+    _click_proceed_then_add_to_cart(page)
+
+
+# ---------------------------------------------------------------------------
+# Payment flow (Georgia portal → popup checkout)
+# ---------------------------------------------------------------------------
+
+def _wait_ga(page: Page, ms: int = 1500) -> None:
+    try:
+        page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeoutError:
+        pass
+    time.sleep(ms / 1000)
+
+
+def _fill_payment_field(frame, selectors: list[str], value: str, label: str) -> bool:
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                loc.click(click_count=3)
+                loc.fill(value)
+                print(f'  [FILL] {label}: "{value}" via {sel}')
+                return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not fill {label}')
+    return False
+
+
+def _select_payment_field(frame, selectors: list[str], value: str, label: str) -> bool:
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                opts = loc.evaluate(
+                    "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                )
+                val_lower = value.lower()
+                for o in opts:
+                    if o["value"] == value or o["text"] == value:
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" via {sel}')
+                        return True
+                for o in opts:
+                    if val_lower in o["value"].lower() or val_lower in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" (fuzzy) via {sel}')
+                        return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not select {label}')
+    return False
+
+
+def step_navigate_to_cart_payment(page: Page):
+    """Navigate to Payment → Cart Payment using the same hover-menu pattern as PERMIT."""
+    print("\n[PAYMENT 1] Navigating to PAYMENT → CART PAYMENT...")
+
+    # Hover the PAYMENT menu item (same pattern as PERMIT menu)
+    payment_menu = page.get_by_role("link", name="PAYMENT", exact=True)
+    try:
+        payment_menu.hover(timeout=5000)
+        print("  [OK] Hovered PAYMENT menu")
+    except Exception:
+        # Try case variations
+        for name in ["Payment", "PAYMENT", "payment"]:
+            try:
+                loc = page.get_by_role("link", name=name)
+                loc.hover(timeout=3000)
+                print(f'  [OK] Hovered menu via name="{name}"')
+                break
+            except Exception:
+                continue
+        else:
+            _fatal(page, "Could not find PAYMENT menu in toolbar")
+
+    page.wait_for_timeout(500)
+
+    # Click CART PAYMENT from the dropdown
+    for name in ["CART PAYMENT", "Cart Payment", "CART PAYMENTS"]:
+        try:
+            loc = page.get_by_role("link", name=name)
+            loc.click(timeout=3000)
+            print(f'  [OK] Clicked {name}')
+            break
+        except Exception:
+            continue
+    else:
+        # Fallback to text-based
+        for sel in ['a:has-text("Cart Payment")', 'text=Cart Payment']:
+            try:
+                page.locator(sel).first.click(timeout=3000)
+                print(f'  [OK] Clicked Cart Payment via {sel}')
+                break
+            except Exception:
+                continue
+        else:
+            _fatal(page, "Could not find CART PAYMENT in dropdown")
+
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(2000)
+    print("[OK] On Cart Payment page")
+
+
+def step_click_pay(page: Page):
+    """Click the Pay button at the bottom of the cart payment page."""
+    print("\n[PAYMENT 2] Clicking Pay...")
+
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+
+    for sel in [
+        'input[value="Pay"]', 'button:has-text("Pay")',
+        'a:has-text("Pay")', 'input[type="submit"][value="Pay"]',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=5_000):
+                loc.click()
+                print(f'  [CLICK] Pay via {sel}')
+                break
+        except Exception:
+            continue
+    else:
+        _fatal(page, "Could not find Pay button")
+
+    _wait_ga(page, 3000)
+    print("[OK] Pay clicked")
+
+
+def step_click_proceed(page: Page):
+    """Click the Proceed button."""
+    print("\n[PAYMENT 3] Clicking Proceed...")
+
+    for sel in [
+        'input[value="Proceed"]', 'button:has-text("Proceed")',
+        'a:has-text("Proceed")', 'input[type="submit"][value="Proceed"]',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=5_000):
+                loc.click()
+                print(f'  [CLICK] Proceed via {sel}')
+                break
+        except Exception:
+            continue
+    else:
+        _fatal(page, "Could not find Proceed button")
+
+    _wait_ga(page, 3000)
+    print("[OK] Proceed clicked")
+
+
+def step_click_pay_now(page: Page):
+    """Click Pay Now — this triggers a popup window for card entry."""
+    print("\n[PAYMENT 4] Clicking Pay Now...")
+
+    for sel in [
+        'input[value="Pay Now"]', 'button:has-text("Pay Now")',
+        'a:has-text("Pay Now")', 'input[type="submit"][value="Pay Now"]',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=5_000):
+                loc.click()
+                print(f'  [CLICK] Pay Now via {sel}')
+                break
+        except Exception:
+            continue
+    else:
+        _fatal(page, "Could not find Pay Now button")
+
+    time.sleep(3)
+    print("[OK] Pay Now clicked — popup should appear")
+
+
+def step_fill_card_popup(page: Page, payment_card: dict):
+    """Fill credit card info in the popup window that Pay Now opens."""
+    print("\n[PAYMENT 5] Filling card in popup...")
+
+    # Wait for the popup to appear
+    popup_page = None
+    all_pages = page.context.pages
+    for p in all_pages:
+        if p != page:
+            popup_page = p
+            break
+
+    if not popup_page:
+        # Try waiting for it
+        try:
+            with page.context.expect_page(timeout=10_000) as new_page_info:
+                pass
+            popup_page = new_page_info.value
+        except Exception:
+            pass
+
+    if not popup_page:
+        _fatal(page, "Payment popup window did not appear")
+
+    popup_page.wait_for_load_state("domcontentloaded", timeout=15_000)
+    time.sleep(5)
+    # Wait for the page to fully render — govhub.com takes a moment
+    try:
+        popup_page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeoutError:
+        pass
+    time.sleep(3)
+    print(f"  [INFO] Popup URL: {popup_page.url[:80]}")
+
+    # The popup may have an iframe for card fields — govhub loads them dynamically
+    target = popup_page
+    card_found = False
+    for sel in [
+        'input[name*="CardNumber" i]', 'input[id*="CardNumber" i]',
+        'input[name*="ccNumber" i]', 'input[autocomplete="cc-number"]',
+        'input[name*="card" i]', 'input[name*="cardnumber" i]',
+        'input[id*="card" i]', 'input[placeholder*="card" i]',
+    ]:
+        try:
+            if popup_page.locator(sel).first.is_visible(timeout=5_000):
+                card_found = True
+                break
+        except Exception:
+            continue
+
+    if not card_found:
+        for frame in popup_page.frames:
+            if frame == popup_page.main_frame:
+                continue
+            try:
+                for sel in ['input[name*="CardNumber" i]', 'input[id*="CardNumber" i]', 'input[type="tel"]']:
+                    if frame.locator(sel).first.is_visible(timeout=2_000):
+                        target = frame
+                        card_found = True
+                        print(f'  [INFO] Card fields in iframe: {frame.url[:60]}')
+                        break
+                if card_found:
+                    break
+            except Exception:
+                continue
+
+    if not card_found:
+        print("  [DEBUG] Popup main page fields:")
+        fields = popup_page.query_selector_all("input:not([type='hidden']), select")
+        for el in fields:
+            id_ = el.get_attribute("id") or ""
+            name = el.get_attribute("name") or ""
+            type_ = el.get_attribute("type") or ""
+            ph = el.get_attribute("placeholder") or ""
+            print(f"    id={id_!r:30s} name={name!r:30s} type={type_!r:12s} ph={ph!r}")
+        # Check iframes
+        for frame in popup_page.frames:
+            if frame == popup_page.main_frame:
+                continue
+            print(f"  [DEBUG] Iframe: {frame.url[:80]}")
+            try:
+                iframe_fields = frame.query_selector_all("input:not([type='hidden']), select")
+                for el in iframe_fields:
+                    id_ = el.get_attribute("id") or ""
+                    name = el.get_attribute("name") or ""
+                    type_ = el.get_attribute("type") or ""
+                    print(f"    id={id_!r:30s} name={name!r:30s} type={type_!r}")
+            except Exception:
+                print("    (could not read iframe fields)")
+
+    # Always dump fields so we can see what govhub has
+    print("  [DEBUG] All popup fields (main page):")
+    fields = popup_page.query_selector_all("input:not([type='hidden']), select")
+    for el in fields:
+        id_ = el.get_attribute("id") or ""
+        name = el.get_attribute("name") or ""
+        type_ = el.get_attribute("type") or ""
+        ac = el.get_attribute("autocomplete") or ""
+        ph = el.get_attribute("placeholder") or ""
+        print(f"    id={id_!r:25s} name={name!r:25s} type={type_!r:10s} ac={ac!r:15s} ph={ph!r}")
+
+    # Check ALL iframes — card fields are often in a Stripe/payment iframe
+    print(f"  [DEBUG] Frames: {len(popup_page.frames)}")
+    for frame in popup_page.frames:
+        if frame == popup_page.main_frame:
+            continue
+        print(f"  [DEBUG] Iframe: {frame.url[:100]}")
+        try:
+            iframe_fields = frame.query_selector_all("input, select")
+            for el in iframe_fields:
+                id_ = el.get_attribute("id") or ""
+                name = el.get_attribute("name") or ""
+                type_ = el.get_attribute("type") or ""
+                ph = el.get_attribute("placeholder") or ""
+                print(f"    id={id_!r:25s} name={name!r:25s} type={type_!r:10s} ph={ph!r}")
+        except Exception as e:
+            print(f"    (error reading iframe: {e})")
+
+    # Try filling on main page first, then each iframe
+    targets_to_try = [popup_page] + [f for f in popup_page.frames if f != popup_page.main_frame]
+
+    # Govhub uses separate iframes for each card field (vault.county-taxes.com):
+    #   iframe 1: #cc_credit_card_number  (type=tel)
+    #   iframe 2: #cc_expiration_date     (type=tel, placeholder=mm/yy)
+    #   iframe 3: #cc_cvv_number          (type=tel)
+    # Name on card is on the main popup page.
+
+    iframes = [f for f in popup_page.frames if f != popup_page.main_frame]
+
+    # Card number — iframe 1
+    for f in iframes:
+        if _fill_payment_field(f, [
+            '#cc_credit_card_number', 'input[autocomplete="cc-number"]',
+            'input[type="tel"]',
+        ], payment_card["cardNumber"], "Card Number"):
+            break
+
+    # Expiration — iframe 2 (single MM/YY input)
+    exp = f"{payment_card['expMonth']}/{payment_card['expYear'][-2:]}"
+    for f in iframes:
+        if _fill_payment_field(f, [
+            '#cc_expiration_date', 'input[placeholder*="mm" i]',
+            'input[autocomplete="cc-exp"]',
+        ], exp, "Expiration"):
+            break
+
+    # CVV — iframe 3
+    for f in iframes:
+        if _fill_payment_field(f, [
+            '#cc_cvv_number', 'input[autocomplete="cc-csc"]',
+        ], payment_card["cvv"], "CVV"):
+            break
+
+    # Name on card — main popup page (not in an iframe)
+    _fill_payment_field(popup_page, [
+        '#name-on-card-52', 'input[autocomplete="cc-name"]',
+        'input[name="user-name"]',
+    ], payment_card["cardholderName"], "Name on Card")
+
+    # Billing address + contact — all on the main popup page
+    _fill_payment_field(popup_page, [
+        '#address-62', 'input[name="address1"]', 'input[autocomplete="address-line1"]',
+    ], "5979 NW 151 ST Suite 101", "Address")
+
+    _fill_payment_field(popup_page, [
+        '#city-62', 'input[name="city"]', 'input[autocomplete="address-level2"]',
+    ], "Miami Lakes", "City")
+
+    # State dropdown
+    for sel in ['#state-62', 'input[name="state"]', 'select[name="state"]']:
+        try:
+            loc = popup_page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                tag = loc.evaluate("el => el.tagName.toLowerCase()")
+                if tag == "select":
+                    opts = loc.evaluate(
+                        "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                    )
+                    for o in opts:
+                        if "florida" in o["text"].lower() or o["value"] == "FL":
+                            loc.select_option(value=o["value"])
+                            print(f'  [SELECT] State: "{o["text"]}"')
+                            break
+                else:
+                    loc.fill("FL")
+                    print('  [FILL] State: "FL"')
+                break
+        except Exception:
+            continue
+
+    _fill_payment_field(popup_page, [
+        '#postal-code-62', 'input[name="postal-code"]', 'input[autocomplete="postal-code"]',
+    ], "33014", "Postal Code")
+
+    # Country dropdown
+    for sel in ['#country-62', 'input[name="country"]', 'select[name="country"]']:
+        try:
+            loc = popup_page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                tag = loc.evaluate("el => el.tagName.toLowerCase()")
+                if tag == "select":
+                    opts = loc.evaluate(
+                        "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                    )
+                    for o in opts:
+                        if "united states" in o["text"].lower() or o["value"] == "US":
+                            loc.select_option(value=o["value"])
+                            print(f'  [SELECT] Country: "{o["text"]}"')
+                            break
+                else:
+                    loc.fill("US")
+                    print('  [FILL] Country: "US"')
+                break
+        except Exception:
+            continue
+
+    _fill_payment_field(popup_page, [
+        '#email-84', 'input[name="email"]', 'input[autocomplete="email"]',
+    ], "paceywells03134@gmail.com", "Email")
+
+    _fill_payment_field(popup_page, [
+        '#phone-number-84', 'input[name="phone"]', 'input[autocomplete="tel"]',
+    ], "9543998833", "Phone")
+
+    # Submit payment form on popup page
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+    for sel in [
+        'button:has-text("Pay")', 'input[value="Pay"]',
+        'button:has-text("Submit")', 'input[value="Submit"]',
+        'button:has-text("Continue")', 'input[value="Continue"]',
+        'input[type="submit"]', 'button[type="submit"]',
+    ]:
+        try:
+            loc = popup_page.locator(sel).first
+            if loc.is_visible(timeout=3_000):
+                loc.click()
+                print(f'  [CLICK] via {sel}')
+                break
+        except Exception:
+            continue
+
+    time.sleep(5)
+
+    # Final confirmation page — click Submit
+    print("\n[PAYMENT 6] Final confirmation — clicking Submit...")
+    popup_page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+    for sel in [
+        'button:has-text("Submit")', 'input[value="Submit"]',
+        'button:has-text("Pay")', 'input[value="Pay"]',
+        'button:has-text("Confirm")', 'input[value="Confirm"]',
+        'input[type="submit"]', 'button[type="submit"]',
+    ]:
+        try:
+            loc = popup_page.locator(sel).first
+            if loc.is_visible(timeout=5_000):
+                loc.click()
+                print(f'  [CLICK] Final submit via {sel}')
+                break
+        except Exception:
+            continue
+
+    time.sleep(5)
+    print("[OK] Payment submitted")
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +1012,16 @@ def run(
     permit_type = permit.get("permitType", "")
 
     # ── Validate ──────────────────────────────────────────────────────
+    if not payment_card or not payment_card.get("cardNumber"):
+        return {
+            "permitId": permit_id,
+            "driverName": driver_name,
+            "tractor": tractor,
+            "permitType": permit_type,
+            "status": "error",
+            "message": "No payment card configured — go to Settings to add a card",
+        }
+
     errors = validate_permit(permit)
     if errors:
         return {
@@ -621,6 +1122,15 @@ def run(
                         "message": f"Unexpected: {e}",
                     })
 
+            # Payment flow — only if at least one form succeeded
+            succeeded_forms = sum(1 for r in form_results if r["status"] == "success")
+            if succeeded_forms > 0:
+                step_navigate_to_cart_payment(page)
+                step_click_pay(page)
+                step_click_proceed(page)
+                step_click_pay_now(page)
+                step_fill_card_popup(page, payment_card)
+
         except PermitError as e:
             # Top-level error (login failure, etc.)
             return {
@@ -653,10 +1163,10 @@ def run(
 
     if succeeded == total:
         status = "success"
-        message = f"All {total} form(s) filled successfully — stopped before payment"
+        message = f"All {total} form(s) filled — payment submitted"
     elif succeeded > 0:
         status = "success"
-        message = f"{succeeded}/{total} form(s) filled — {total - succeeded} failed"
+        message = f"{succeeded}/{total} form(s) filled — payment submitted for successful ones"
     else:
         status = "error"
         message = f"All {total} form(s) failed"
