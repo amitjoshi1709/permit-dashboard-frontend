@@ -572,14 +572,54 @@ export default function OrderForm({ onToast }) {
       extraFields: e.extraFields ? { ...e.extraFields } : null,
     })));
 
-    // Group queue entries into a single API call
-    // Each queue entry becomes its own batch of (driverIds x [state])
-    // We submit them sequentially so each gets its own jobId
-    for (const entry of queue) {
+    // Merge all GA trip/fuel entries into one API call per permitType so the
+    // backend processes them in a single browser session (avoids 45-min cooldown).
+    // Group by permitType since the backend needs a single type per job.
+    const gaEntries = queue.filter(
+      (e) => e.state === "GA" && ["trip", "fuel", "trip_fuel"].includes(e.permitType)
+    );
+    const otherEntries = queue.filter((e) => !gaEntries.includes(e));
+
+    const submissions = [];
+
+    // Group GA entries by permitType, merge driver IDs within each group
+    const gaByType = {};
+    for (const e of gaEntries) {
+      if (!gaByType[e.permitType]) gaByType[e.permitType] = [];
+      gaByType[e.permitType].push(e);
+    }
+    for (const [pType, entries] of Object.entries(gaByType)) {
+      const mergedDriverIds = entries.flatMap((e) => e.driverIds);
+      const mergedDriverNames = entries.flatMap((e) => e.driverNames);
+      const first = entries[0];
+      submissions.push({
+        merged: true,
+        entries,
+        driverIds: mergedDriverIds,
+        driverNames: mergedDriverNames,
+        state: "GA",
+        stateLabel: first.stateLabel,
+        permitType: pType,
+        permitTypeLabel: first.permitTypeLabel,
+        effectiveDate: first.effectiveDate,
+        effectiveTime: first.effectiveTime,
+        extraFields: first.extraFields,
+      });
+    }
+
+    for (const entry of otherEntries) {
+      submissions.push({ merged: false, entries: [entry], ...entry });
+    }
+
+    for (const sub of submissions) {
+      const entry = sub;
       // Only GA splits trip_fuel into 2 separate permits; other states (AL) handle it as 1.
       const splitFactor = (entry.permitType === "trip_fuel" && entry.state === "GA") ? 2 : 1;
       const totalPermits = entry.driverIds.length * splitFactor;
-      addLog(`Submitting ${entry.driverIds.length} driver(s) · ${entry.stateLabel} · ${entry.permitTypeLabel} · ${totalPermits} permit(s)...`, "info");
+      const label = sub.merged
+        ? `${gaEntries.length} GA cart item(s) · ${entry.driverIds.length} driver(s) · ${totalPermits} permit(s)`
+        : `${entry.driverIds.length} driver(s) · ${entry.stateLabel} · ${entry.permitTypeLabel} · ${totalPermits} permit(s)`;
+      addLog(`Submitting ${label}...`, "info");
 
       try {
         const orderPayload = {

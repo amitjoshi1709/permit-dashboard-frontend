@@ -25,7 +25,7 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 from config import COMPANY
 from scripts.alabama_tf.runner import run as run_alabama_tf
 from scripts.alabama_annual_osow.runner import run as run_alabama_annual_osow
-from scripts.georgia_tf.runner import run as run_georgia_tf
+from scripts.georgia_tf.runner import run as run_georgia_tf, run_batch as run_georgia_tf_batch
 from scripts.georgia_osow.runner import run as run_georgia_osow
 from scripts.arkansas_trip.runner import run as run_arkansas_trip
 from scripts.florida_trip.runner import run as run_florida_trip
@@ -159,7 +159,36 @@ def run_permit_job(self, job_id: str, permits: list):
     if not payment_card:
         print(f"[task:{job_id}] WARNING: No payment card configured in settings")
 
-    for permit in permits:
+    # Batch all GA trip/fuel permits together so they share one browser session
+    # and avoid the 45-minute cooldown between purchases.
+    ga_tf_permits = [p for p in permits if p["state"] == "GA" and p.get("permitType", "") in ("trip", "fuel", "trip_fuel")]
+    other_permits = [p for p in permits if p not in ga_tf_permits]
+
+    if ga_tf_permits:
+        print(f"[task:{job_id}] Batching {len(ga_tf_permits)} GA permit(s) into one session")
+        try:
+            batch_results = run_georgia_tf_batch(
+                ga_tf_permits, job_id,
+                on_captcha_needed=None, company=COMPANY, payment_card=payment_card,
+            )
+            for result in batch_results:
+                results.append(result)
+                db_status = "Active" if result["status"] == "success" else "failed"
+                update_permit_status(result["permitId"], db_status)
+        except Exception as e:
+            for p in ga_tf_permits:
+                results.append({
+                    "permitId": p["permitId"],
+                    "driverName": f"{p['driver']['firstName']} {p['driver']['lastName']}",
+                    "tractor": p["driver"]["tractor"],
+                    "permitType": p.get("permitType", ""),
+                    "status": "error",
+                    "message": str(e),
+                })
+                update_permit_status(p["permitId"], "failed")
+        set_job_status(job_id, "processing", results)
+
+    for permit in other_permits:
         state = permit["state"]
         permit_type = permit.get("permitType", "")
         runner = _get_runner(state, permit_type)

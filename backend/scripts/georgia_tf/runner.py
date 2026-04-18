@@ -1182,3 +1182,193 @@ def run(
         "message": message,
         "formResults": form_results,
     }
+
+
+def run_batch(
+    permits: list[dict],
+    job_id: str,
+    on_captcha_needed: Optional[Callable] = None,
+    company: dict = None,
+    payment_card: dict = None,
+) -> list[dict]:
+    """
+    Process multiple GA permits in one browser session.
+
+    Fills each permit form and adds to cart, then pays for all at once.
+    This avoids the 45-minute cooldown between individual purchases.
+
+    Returns a list of result dicts (one per permit).
+    """
+    if not payment_card or not payment_card.get("cardNumber"):
+        return [{
+            "permitId": p["permitId"],
+            "driverName": f"{p['driver']['firstName']} {p['driver']['lastName']}",
+            "tractor": p["driver"].get("tractor", ""),
+            "permitType": p.get("permitType", ""),
+            "status": "error",
+            "message": "No payment card configured — go to Settings to add a card",
+        } for p in permits]
+
+    username = os.getenv("GA_PORTAL_USERNAME")
+    password = os.getenv("GA_PORTAL_PASSWORD")
+    if not username or not password:
+        return [{
+            "permitId": p["permitId"],
+            "driverName": f"{p['driver']['firstName']} {p['driver']['lastName']}",
+            "tractor": p["driver"].get("tractor", ""),
+            "permitType": p.get("permitType", ""),
+            "status": "error",
+            "message": "Missing GA_PORTAL_USERNAME or GA_PORTAL_PASSWORD in .env",
+        } for p in permits]
+
+    ga_account_no = os.getenv("GA_ACCOUNT_NO", "82761")
+
+    # Pre-validate and transform all permits
+    all_forms = []
+    results = []
+    for permit in permits:
+        driver = permit["driver"]
+        driver_name = f"{driver['firstName']} {driver['lastName']}"
+        tractor = driver.get("tractor", "")
+        permit_id = permit["permitId"]
+        permit_type = permit.get("permitType", "")
+
+        errors = validate_permit(permit)
+        if errors:
+            results.append({
+                "permitId": permit_id,
+                "driverName": driver_name,
+                "tractor": tractor,
+                "permitType": permit_type,
+                "status": "error",
+                "message": f"Validation failed: {'; '.join(errors)}",
+            })
+            continue
+
+        try:
+            portal_data_list = transform_permit(permit, account_no=ga_account_no)
+        except ValueError as e:
+            results.append({
+                "permitId": permit_id,
+                "driverName": driver_name,
+                "tractor": tractor,
+                "permitType": permit_type,
+                "status": "error",
+                "message": f"Transform failed: {e}",
+            })
+            continue
+
+        for pd in portal_data_list:
+            all_forms.append({
+                "permit_id": permit_id,
+                "driver_name": driver_name,
+                "tractor": tractor,
+                "permit_type": permit_type,
+                "portal_data": pd,
+            })
+
+    if not all_forms:
+        return results
+
+    print(f"[Georgia BATCH] Processing {len(all_forms)} form(s) across {len(permits)} permit(s)")
+
+    form_results = {}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=False,
+            slow_mo=SLOW_MO,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--start-maximized",
+            ],
+        )
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+        )
+        page = context.new_page()
+        page.set_default_timeout(TIMEOUT)
+
+        try:
+            _login(page, username, password)
+
+            # Phase 1: Fill all forms and add each to cart
+            for i, form in enumerate(all_forms):
+                label = f"{form['permit_id']} [{form['portal_data']['_portalPermitType']}] for {form['driver_name']}"
+                print(f"\n[Georgia BATCH] Adding to cart {i + 1}/{len(all_forms)}: {label}")
+
+                if not _is_logged_in(page):
+                    print("[WARN] Session expired — re-logging in...")
+                    _login(page, username, password)
+
+                try:
+                    _fill_one_permit_form(page, form["portal_data"])
+                    form_results.setdefault(form["permit_id"], []).append("success")
+                    print(f"  [OK] Added to cart")
+                except (PermitError, Exception) as e:
+                    print(f"  [ERROR] {e}")
+                    form_results.setdefault(form["permit_id"], []).append("error")
+
+            # Phase 2: Pay for everything in the cart at once
+            total_in_cart = sum(
+                1 for statuses in form_results.values()
+                for s in statuses if s == "success"
+            )
+            if total_in_cart > 0:
+                print(f"\n[Georgia BATCH] {total_in_cart} permit(s) in cart — proceeding to payment")
+                step_navigate_to_cart_payment(page)
+                step_click_pay(page)
+                step_click_proceed(page)
+                step_click_pay_now(page)
+                step_fill_card_popup(page, payment_card)
+            else:
+                print("\n[Georgia BATCH] No permits added to cart — skipping payment")
+
+        except (PermitError, Exception) as e:
+            print(f"\n[Georgia BATCH] Fatal error: {e}")
+            # Mark all remaining permits as failed
+            for permit in permits:
+                pid = permit["permitId"]
+                if pid not in form_results:
+                    form_results[pid] = ["error"]
+
+        finally:
+            time.sleep(3)
+            try:
+                browser.close()
+            except Exception:
+                pass
+
+    # Build per-permit results
+    for permit in permits:
+        pid = permit["permitId"]
+        if any(r["permitId"] == pid for r in results):
+            continue
+        driver = permit["driver"]
+        statuses = form_results.get(pid, [])
+        succeeded = statuses.count("success")
+        total = len(statuses)
+        if total == 0:
+            status, message = "error", "No forms processed"
+        elif succeeded == total:
+            status, message = "success", f"All {total} form(s) added to cart — payment submitted"
+        elif succeeded > 0:
+            status, message = "success", f"{succeeded}/{total} form(s) added to cart — payment submitted"
+        else:
+            status, message = "error", f"All {total} form(s) failed"
+        results.append({
+            "permitId": pid,
+            "driverName": f"{driver['firstName']} {driver['lastName']}",
+            "tractor": driver.get("tractor", ""),
+            "permitType": permit.get("permitType", ""),
+            "status": status,
+            "message": message,
+        })
+
+    print(f"\n[Georgia BATCH] Done — {sum(1 for r in results if r['status'] == 'success')}/{len(results)} succeeded")
+    return results
