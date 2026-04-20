@@ -1937,12 +1937,252 @@ def _proceed_to_secure_checkout(page: Page):
     else:
         _fatal(page, f"SecureCheckout page did not load after 30s. URL still: {page.url}")
 
-    print("[STOP] =============================================")
-    print("[STOP] SecureCheckout page reached — stopping before card entry.")
-    print("[STOP] =============================================\n")
+    print("[OK] SecureCheckout page reached")
 
 
-def _save_and_route(page: Page, permit_type: str, extra: dict):
+# ---------------------------------------------------------------------------
+# NIC USA Secure Checkout — same pattern as AL/AR/MS scripts
+# ---------------------------------------------------------------------------
+
+CHECKOUT_CUSTOMER = {
+    "country":    "United States",
+    "first_name": "Erick",
+    "last_name":  "Rodriguez",
+    "address":    "5979 NW 151 ST Suite 101",
+    "city":       "Miami Lakes",
+    "state":      "FL - Florida",
+    "zip":        "33014",
+    "phone":      "786-332-5691",
+    "email":      "info@megatruckingllc.com",
+}
+
+
+def _click_next_checkout(page: Page, label: str) -> None:
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+    for attempt in [
+        lambda: page.get_by_role("button", name="Next").click(timeout=3_000),
+        lambda: page.get_by_role("link", name="Next").click(timeout=3_000),
+        lambda: page.locator('text="Next"').first.click(timeout=3_000),
+        lambda: page.locator(':text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('a:has-text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Next")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Next"]').first.click(timeout=3_000),
+        lambda: page.locator('input[type="submit"]').first.click(timeout=3_000),
+    ]:
+        try:
+            attempt()
+            print(f'  [CLICK] Next on {label}')
+            return
+        except Exception:
+            continue
+    try:
+        for el in page.locator('*').all():
+            try:
+                if el.is_visible() and el.inner_text().strip() in ("Next", "Next >", "Next ›"):
+                    el.click()
+                    print(f'  [CLICK] Next via text match on {label}')
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+    _fatal(page, f"Could not find Next button on {label}")
+
+
+def _fill_payment_field(frame, selectors, value, label):
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                loc.click(click_count=3)
+                loc.fill(value)
+                print(f'  [FILL] {label}: "{value}" via {sel}')
+                return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not fill {label}')
+    return False
+
+
+def _select_payment_field(frame, selectors, value, label):
+    for sel in selectors:
+        try:
+            loc = frame.locator(sel).first
+            if loc.is_visible(timeout=1_000):
+                opts = loc.evaluate(
+                    "el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))"
+                )
+                val_lower = value.lower()
+                for o in opts:
+                    if o["value"] == value or o["text"] == value:
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" via {sel}')
+                        return True
+                for o in opts:
+                    if val_lower in o["value"].lower() or val_lower in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] {label}: "{o["text"]}" (fuzzy) via {sel}')
+                        return True
+        except Exception:
+            continue
+    print(f'  [MISS] Could not select {label}')
+    return False
+
+
+def _checkout_fill_customer(page: Page):
+    print("\n[CHECKOUT] Filling customer info...")
+    time.sleep(5)
+
+    for label, value in [
+        ("First Name",  CHECKOUT_CUSTOMER["first_name"]),
+        ("Last Name",   CHECKOUT_CUSTOMER["last_name"]),
+        ("Address",     CHECKOUT_CUSTOMER["address"]),
+        ("City",        CHECKOUT_CUSTOMER["city"]),
+        ("ZIP",         CHECKOUT_CUSTOMER["zip"]),
+        ("Zip",         CHECKOUT_CUSTOMER["zip"]),
+        ("Phone",       CHECKOUT_CUSTOMER["phone"]),
+        ("Email",       CHECKOUT_CUSTOMER["email"]),
+    ]:
+        try:
+            loc = page.get_by_label(label, exact=False)
+            if loc.count() > 0 and loc.first.is_visible():
+                loc.first.fill("")
+                loc.first.fill(value)
+                print(f'  [FILL] {label}: "{value}"')
+        except Exception:
+            pass
+
+    for sel in ['select[name*="Country" i]', 'select[id*="Country" i]']:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                opts = loc.evaluate("el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))")
+                for o in opts:
+                    if "united states" in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] Country: "{o["text"]}"')
+                        break
+                break
+        except Exception:
+            continue
+
+    for sel in ['select[name*="State" i]', 'select[id*="State" i]']:
+        try:
+            loc = page.locator(sel).first
+            if loc.is_visible(timeout=2_000):
+                opts = loc.evaluate("el => Array.from(el.options).map(o => ({value: o.value, text: o.text.trim()}))")
+                for o in opts:
+                    if "florida" in o["text"].lower():
+                        loc.select_option(value=o["value"])
+                        print(f'  [SELECT] State: "{o["text"]}"')
+                        break
+                break
+        except Exception:
+            continue
+
+    time.sleep(1)
+    _click_next_checkout(page, "customer info")
+    time.sleep(3)
+    print("[OK] Customer info filled")
+
+
+def _checkout_fill_card(page: Page, payment_card: dict):
+    print("\n[CHECKOUT] Filling card info...")
+    time.sleep(2)
+
+    target = page
+    card_found = False
+    for sel in [
+        'input[name*="CardNumber" i]', 'input[id*="CardNumber" i]',
+        'input[name*="ccNumber" i]', 'input[autocomplete="cc-number"]',
+    ]:
+        try:
+            if page.locator(sel).first.is_visible(timeout=2_000):
+                card_found = True
+                break
+        except Exception:
+            continue
+
+    if not card_found:
+        for frame in page.frames:
+            if frame == page.main_frame:
+                continue
+            try:
+                for sel in ['input[name*="CardNumber" i]', 'input[id*="CardNumber" i]', 'input[type="tel"]']:
+                    if frame.locator(sel).first.is_visible(timeout=2_000):
+                        target = frame
+                        card_found = True
+                        break
+                if card_found:
+                    break
+            except Exception:
+                continue
+
+    _fill_payment_field(target, [
+        'input[name*="CardNumber" i]', 'input[id*="CardNumber" i]',
+        'input[name*="ccNumber" i]', 'input[autocomplete="cc-number"]',
+    ], payment_card["cardNumber"], "Card Number")
+
+    _select_payment_field(target, [
+        'select[name*="ExpMonth" i]', 'select[id*="ExpMonth" i]',
+        'select[name*="ExpirationMonth" i]', 'select[autocomplete="cc-exp-month"]',
+    ], payment_card["expMonth"], "Exp Month")
+
+    _select_payment_field(target, [
+        'select[name*="ExpYear" i]', 'select[id*="ExpYear" i]',
+        'select[name*="ExpirationYear" i]', 'select[autocomplete="cc-exp-year"]',
+    ], payment_card["expYear"], "Exp Year")
+
+    _fill_payment_field(target, [
+        'input[name*="SecurityCode" i]', 'input[name*="CVV" i]',
+        'input[name*="CVC" i]', 'input[name*="CardCode" i]',
+        'input[id*="SecurityCode" i]', 'input[id*="CVV" i]',
+        'input[autocomplete="cc-csc"]',
+    ], payment_card["cvv"], "CVV")
+
+    _fill_payment_field(target, [
+        'input[name*="NameOnCard" i]', 'input[name*="CardName" i]',
+        'input[name*="cardHolder" i]', 'input[id*="NameOnCard" i]',
+        'input[autocomplete="cc-name"]',
+    ], payment_card["cardholderName"], "Name on Card")
+
+    print("[OK] Card info filled")
+
+
+def _checkout_submit(page: Page):
+    print("\n[CHECKOUT] Submitting payment...")
+
+    _click_next_checkout(page, "payment info page")
+    time.sleep(3)
+
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+
+    for attempt in [
+        lambda: page.get_by_role("button", name="Submit Payment").click(timeout=3_000),
+        lambda: page.get_by_role("link", name="Submit Payment").click(timeout=3_000),
+        lambda: page.locator('text="Submit Payment"').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Submit Payment")').first.click(timeout=3_000),
+        lambda: page.locator('a:has-text("Submit Payment")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Submit Payment"]').first.click(timeout=3_000),
+        lambda: page.locator('button:has-text("Submit")').first.click(timeout=3_000),
+        lambda: page.locator('input[value="Submit"]').first.click(timeout=3_000),
+    ]:
+        try:
+            attempt()
+            print('  [CLICK] Submit Payment')
+            break
+        except Exception:
+            continue
+    else:
+        _fatal(page, "Could not find Submit Payment button")
+
+    time.sleep(5)
+    print("[OK] Payment submitted")
+
+
+def _save_and_route(page: Page, permit_type: str, extra: dict, payment_card: dict = None):
     """Full post-save flow, branching by permit type:
         os_ow (and legacy trip): Save → Routing tab → fill route → Generate → dismiss
             disclaimer → Review & Submit tab → Submit → Online Payment → Secure Checkout
@@ -1984,6 +2224,14 @@ def _save_and_route(page: Page, permit_type: str, extra: dict):
     _click_submit_on_review(page)
     _activate_tab(page, "Payment", ["payment"], settle_ms=2000)
     _proceed_to_secure_checkout(page)
+
+    # Fill checkout and submit payment
+    if payment_card and payment_card.get("cardNumber"):
+        # Auto-accept JS dialogs on checkout page
+        page.on("dialog", lambda dialog: dialog.accept())
+        _checkout_fill_customer(page)
+        _checkout_fill_card(page, payment_card)
+        _checkout_submit(page)
 
 
 # ---------------------------------------------------------------------------
@@ -2078,8 +2326,7 @@ def run(
 
             # Step 5: Save → (Routing for OS/OW) → Review & Submit → Submit → Payment
             #         → external SecureCheckout (where the script stops).
-            _save_and_route(page, permit_type, extra)
-
+            _save_and_route(page, permit_type, extra, payment_card)
 
             return {
                 "permitId": permit_id,
@@ -2087,7 +2334,7 @@ def run(
                 "tractor": tractor,
                 "permitType": permit_type,
                 "status": "success",
-                "message": "SecureCheckout page reached — stopping before card entry",
+                "message": "Payment submitted",
             }
 
         except PermitError as e:
