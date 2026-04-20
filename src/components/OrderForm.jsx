@@ -431,9 +431,19 @@ export default function OrderForm({ onToast }) {
     if (pollIntervalsRef.current[jobId]) return;
     setProcessing(true);
 
+    let failCount = 0;
+    const MAX_FAILS = 10; // 10 consecutive failures × 3s = 30s before giving up
+
     const interval = setInterval(async () => {
       try {
         const data = await fetchJobStatus(jobId);
+        if (!data || !data.status) {
+          // Job expired from Redis — treat as lost
+          failCount++;
+          if (failCount >= MAX_FAILS) throw new Error("Job expired");
+          return;
+        }
+        failCount = 0; // reset on success
 
         // Merge backend results into placeholders without duplicating rows.
         // Each backend result is "claimed" exactly once: first by permitId, then
@@ -535,7 +545,24 @@ export default function OrderForm({ onToast }) {
           }
         }
       } catch {
-        // skip this tick
+        failCount++;
+        if (failCount >= MAX_FAILS) {
+          // Job likely lost (Celery killed, Redis expired, etc.) — stop polling
+          clearInterval(interval);
+          delete pollIntervalsRef.current[jobId];
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.jobId === jobId ? { ...j, status: "failed" } : j
+            )
+          );
+          const stillRunning = Object.keys(pollIntervalsRef.current).length > 0;
+          if (!stillRunning) {
+            setProcessing(false);
+            setWaitingCaptcha(false);
+            activeJobIdRef.current = null;
+          }
+          onToast?.("⚠", "Job lost — task was cancelled or timed out");
+        }
       }
     }, 3000);
 
