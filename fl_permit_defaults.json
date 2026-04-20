@@ -1,5 +1,5 @@
 {
-  "trip": {
+  "os_ow": {
     "width":           { "ft": "10",  "in": "9" },
     "height":          { "ft": "9", "in": "0" },
     "length":          { "ft": "60", "in": "0" },
@@ -53,7 +53,7 @@
       { "ft": "36", "in": "0" },
       { "ft": "4",  "in": "6" }
     ],
-    "divisibleLoad":         "Yes",
+    "divisibleLoad":         "No",
     "loadDescriptionChoice": "construction"
   },
   "fl_blanket_bulk": {
@@ -66,7 +66,7 @@
     "rearOverhang":          { "ft": "7",  "in": "0" },
     "vehicleConfig":         "Truck Tractor Semitrailer Hauling",
     "axleCount":             "6",
-    "axleWeights":           ["12500", "15200", "15200", "15200", "15200", "15200"],
+    "axleWeights":           ["12000", "15200", "15200", "15200", "15200", "15200"],
     "axleSpacings": [
       { "ft": "12", "in": "0" },
       { "ft": "5",  "in": "0" },

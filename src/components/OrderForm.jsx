@@ -121,14 +121,17 @@ export default function OrderForm({ onToast }) {
   }, []);
 
   // Permit types available for the currently selected state.
-  // State-specific permit types are hidden unless that state is selected.
+  //   FL: only os_ow + blanket variants. (FL does not order trip/fuel/trip_fuel.
+  //       The OS/OW flow uses the same portal path as the old FL trip script —
+  //       it still clicks the "Trip" radio at the top of the portal.)
+  //   Other states: trip / fuel / trip_fuel / os_ow — blanket variants hidden.
   const availablePermitTypes = useMemo(() => {
     const isFL = selectedState === "FL";
-    const isAL = selectedState === "AL";
     return PERMIT_TYPES.filter((pt) => {
-      if (pt.value.startsWith("fl_")) return isFL;
-      if (pt.value.startsWith("al_")) return isAL;
-      return true;
+      if (isFL) {
+        return pt.value === "os_ow" || pt.value.startsWith("fl_blanket_");
+      }
+      return !pt.value.startsWith("fl_");
     });
   }, [selectedState]);
 
@@ -312,12 +315,22 @@ export default function OrderForm({ onToast }) {
     }
     if (!Array.isArray(pending) || pending.length === 0) return;
 
-    // Group pending picks by (state, type)
+    // Group pending picks by (state, type, serialized extraFields).
+    // Including extraFields in the key keeps permits with different dimensions/axles
+    // in separate queue entries so each row re-submits its exact original values.
+    // FL blanket/OS-OW permits have extraFields stored; simple trip/fuel permits
+    // have null, so they group together as before.
     const groups = {};
     for (const pick of pending) {
-      const key = `${pick.state}|${pick.type}`;
+      const extraKey = pick.extraFields ? JSON.stringify(pick.extraFields) : "";
+      const key = `${pick.state}|${pick.type}|${extraKey}`;
       if (!groups[key]) {
-        groups[key] = { state: pick.state, type: pick.type, picks: [] };
+        groups[key] = {
+          state: pick.state,
+          type: pick.type,
+          extraFields: pick.extraFields || null,
+          picks: [],
+        };
       }
       groups[key].picks.push(pick);
     }
@@ -371,7 +384,10 @@ export default function OrderForm({ onToast }) {
         effectiveTime: null,
         driverIds,
         driverNames,
-        extraFields: null,
+        // Carry the originally-submitted dimensions/axles through so submit sends
+        // the exact same values the portal received the first time. Deep-clone so
+        // edits in one queue row don't mutate another.
+        extraFields: group.extraFields ? JSON.parse(JSON.stringify(group.extraFields)) : null,
         insurance: null,
       });
     });

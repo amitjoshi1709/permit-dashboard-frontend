@@ -23,27 +23,84 @@ export default function DynamicFields({ fields, values, onChange, disabled }) {
 
   if (fields.length === 0) return null;
 
+  // "Starting Location" + "Destination Location" are rendered side-by-side as a
+  // single row of two bordered cards, with their inner fields stacked vertically
+  // (Address / City / Zip). This keeps the route entry visually paired.
+  const PAIR_LEFT = "Starting Location";
+  const PAIR_RIGHT = "Destination Location";
+
+  // Build a render plan that groups the pair together into a single row element.
+  const plan = [];
+  for (let i = 0; i < groups.length; i++) {
+    const [name, fs] = groups[i];
+    if (name === PAIR_LEFT) {
+      const next = groups[i + 1];
+      if (next && next[0] === PAIR_RIGHT) {
+        plan.push({ type: "pair", left: { name, fields: fs }, right: { name: next[0], fields: next[1] } });
+        i++; // skip next
+        continue;
+      }
+    }
+    plan.push({ type: "single", name, fields: fs });
+  }
+
   return (
     <div className="space-y-4 p-4 rounded-lg border border-accent/25 bg-accent/5">
-      {groups.map(([groupName, groupFields]) => (
-        <div key={groupName}>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2 mb-2">
-            {groupName}
+      {plan.map((item, idx) => {
+        if (item.type === "pair") {
+          return (
+            <div key={`pair-${idx}`} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <LocationCard title={item.left.name} fields={item.left.fields}
+                values={values} onChange={onChange} disabled={disabled} />
+              <LocationCard title={item.right.name} fields={item.right.fields}
+                values={values} onChange={onChange} disabled={disabled} />
+            </div>
+          );
+        }
+        return (
+          <div key={item.name}>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2 mb-2">
+              {item.name}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {item.fields.map((field) => (
+                <FieldRenderer
+                  key={field.key}
+                  field={field}
+                  value={values[field.key]}
+                  allValues={values}
+                  onChange={onChange}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {groupFields.map((field) => (
-              <FieldRenderer
-                key={field.key}
-                field={field}
-                value={values[field.key]}
-                allValues={values}
-                onChange={onChange}
-                disabled={disabled}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+// A compact bordered card for a single location (Starting / Destination). Fields
+// stack vertically inside so the card fits comfortably next to its pair.
+function LocationCard({ title, fields, values, onChange, disabled }) {
+  return (
+    <div className="rounded-lg border border-subtle bg-navy-2/40 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2 mb-2">
+        {title}
+      </div>
+      <div className="space-y-2">
+        {fields.map((field) => (
+          <FieldRenderer
+            key={field.key}
+            field={field}
+            value={values[field.key]}
+            allValues={values}
+            onChange={onChange}
+            disabled={disabled}
+          />
+        ))}
+      </div>
     </div>
   );
 }
