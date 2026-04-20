@@ -85,42 +85,7 @@ def _compute_flatbed_begin_date(now: Optional[datetime] = None) -> str:
 # ---------------------------------------------------------------------------
 
 class PermitError(Exception):
-    def __init__(self, message: str, screenshot_path: str = None):
-        super().__init__(message)
-        self.screenshot_path = screenshot_path
-
-
-# ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    """Take a full-page screenshot, but never let a screenshot failure kill the run.
-    Playwright's page.screenshot() can raise during navigation ("Page is navigating
-    and changing the content") which would bubble up through the runner as a silent
-    error. We swallow those errors — the screenshot is diagnostic, not functional."""
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    try:
-        page.screenshot(path=filepath, full_page=True, timeout=10000)
-        print(f"  [SCREENSHOT] {filepath}")
-        return filepath
-    except Exception as e:
-        print(f"  [SCREENSHOT] Skipped '{name}' — {type(e).__name__}: {str(e)[:120]}")
-        return ""
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -1533,7 +1498,6 @@ def _fill_routing_fields(page: Page, extra: dict):
     if dest_city: _safe_fill(page, dest_sels["city"],    dest_city, "Destination City")
     if dest_zip:  _safe_fill(page, dest_sels["zip"],     dest_zip,  "Destination Zip")
 
-    _screenshot(page, "routing_fields_filled")
     print("[OK] Routing fields filled")
 
 
@@ -1553,8 +1517,21 @@ def _click_generate_validated_route(page: Page):
         print("  [GEN-ROUTE] Click dispatched")
     except Exception as e:
         _fatal(page, f"Could not click Generate Validated Route: {e}")
-    page.wait_for_timeout(3000)
-    _screenshot(page, "route_generated")
+
+    # Wait for the ajaxBusy overlay to appear then disappear — route generation
+    # can take 10-30+ seconds on the FL portal.
+    print("  [GEN-ROUTE] Waiting for route generation (ajaxBusy overlay)...")
+    try:
+        page.locator('#ajaxBusy').wait_for(state="visible", timeout=5_000)
+        print("  [GEN-ROUTE] Busy overlay appeared — waiting for it to finish...")
+    except PlaywrightTimeoutError:
+        print("  [GEN-ROUTE] No busy overlay detected — continuing")
+    try:
+        page.locator('#ajaxBusy').wait_for(state="hidden", timeout=60_000)
+        print("  [GEN-ROUTE] Busy overlay gone — route generated")
+    except PlaywrightTimeoutError:
+        print("  [GEN-ROUTE] WARNING: Busy overlay still visible after 60s — continuing anyway")
+    page.wait_for_timeout(2000)
 
 
 def _dismiss_route_disclaimer(page: Page):
@@ -1601,160 +1578,63 @@ def _dismiss_route_disclaimer(page: Page):
 
 
 def _accept_routing_disclaimer(page: Page):
-    """Tick the 'Accept' checkbox under the Routing Disclaimer on Review & Submit.
-
-    Until this checkbox is checked, the Submit button does not advance the page — it
-    just revalidates and silently stays on the same tab. We locate the checkbox by
-    walking the DOM for a 'Routing Disclaimer' or 'Accept' label, tag the matched
-    element with a unique data attribute, and click through that selector.
-    """
+    """Tick the 'Accept' checkbox on the Review & Submit tab.
+    Uses a simple approach: find all unchecked checkboxes, check them via JS."""
     print("\n[ACT] Accepting Routing Disclaimer...")
-    # On FL OS/OW, the Accept element shows up on the Review tab alongside the Submit
-    # button. It may be a button, a checkbox, or a label wrapping a hidden input —
-    # scan broadly for anything containing 'Accept' text, including checkboxes and
-    # labels, both visible and off-viewport.
-    probe_js = """() => {
-        function inRenderedDom(el) {
-            // True if the element is actually rendered (has a layout box),
-            // even if it's scrolled off-screen. This is looser than offsetParent check.
-            if (!el) return false;
-            const r = el.getBoundingClientRect();
-            if (r.width === 0 && r.height === 0) return false;
-            const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') return false;
-            return true;
-        }
 
-        // 1. Try every checkbox in the DOM (including those scrolled out of view).
-        const allBoxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-        const renderedBoxes = allBoxes.filter(inRenderedDom);
-        for (const cb of renderedBoxes) {
-            let labelText = '';
-            if (cb.labels && cb.labels.length) labelText = cb.labels[0].textContent || '';
-            // Also check adjacent text / parent text for "accept"
-            const parentText = cb.parentElement ? (cb.parentElement.textContent || '') : '';
-            const combined = ((cb.id || '') + ' ' + (cb.name || '') + ' ' + labelText + ' ' + parentText).toLowerCase();
-            if (combined.includes('accept') || combined.includes('agree') || combined.includes('disclaimer')) {
-                cb.setAttribute('data-claude-accept', '1');
-                return {
-                    ok: true, kind: 'checkbox',
-                    matched: { id: cb.id||null, name: cb.name||null, checked: cb.checked,
-                               labelText: labelText.trim().slice(0, 120) },
-                };
-            }
-        }
-
-        // 2. Try buttons / inputs / anchors with Accept/Agree text.
-        const clickables = Array.from(document.querySelectorAll(
-            'button, input[type="submit"], input[type="button"], input[type="image"], a, [role="button"]'
-        )).filter(inRenderedDom);
-        for (const el of clickables) {
-            const text = ((el.textContent || '') + ' ' + (el.value || '') + ' ' + (el.title || '') + ' ' +
-                          (el.getAttribute('aria-label') || '')).trim();
-            if (!/\\bAccept\\b/i.test(text) && !/\\bI\\s*Agree\\b/i.test(text) && !/\\bAgree\\b/i.test(text)) continue;
-            if (/cancel|reject|decline|close|back/i.test(text)) continue;
-            const disabled = el.disabled || el.getAttribute('disabled') !== null ||
-                             (el.classList && el.classList.contains('disabled'));
-            if (disabled) continue;
-            el.setAttribute('data-claude-accept', '1');
-            return {
-                ok: true, kind: 'button',
-                matched: { tag: el.tagName, id: el.id || null,
-                           text: text.slice(0, 120),
-                           dataBind: el.getAttribute('data-bind') },
-            };
-        }
-
-        // 3. Last resort: walk all text nodes for "Accept" and look for an interactive
-        //    ancestor (clickable div, label, span with handler) to click.
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-            const t = (node.textContent || '').trim();
-            if (!/^Accept$|^I\\s*Agree$|^I\\s*Accept$/i.test(t)) continue;
-            let p = node.parentElement;
-            for (let i = 0; i < 6 && p; i++, p = p.parentElement) {
-                if (!inRenderedDom(p)) continue;
-                const tag = p.tagName;
-                if (['LABEL', 'DIV', 'SPAN', 'A', 'BUTTON'].includes(tag)) {
-                    p.setAttribute('data-claude-accept', '1');
-                    return {
-                        ok: true, kind: 'text-ancestor',
-                        matched: { tag, id: p.id || null, text: t.slice(0, 80), depth: i },
-                    };
-                }
-            }
-        }
-
-        // Diagnostic dump on failure — collect everything with 'accept' anywhere.
-        const anyAccept = Array.from(document.querySelectorAll('*')).filter(el => {
-            if (!inRenderedDom(el)) return false;
-            const txt = (el.textContent || '').trim();
-            if (txt.length > 200) return false;  // big containers
-            return /accept|disclaimer|agree/i.test(txt) ||
-                   /accept|disclaimer|agree/i.test(el.id || '') ||
-                   /accept|disclaimer|agree/i.test(el.className && typeof el.className === 'string' ? el.className : '');
-        }).slice(0, 40).map(el => ({
-            tag: el.tagName, id: el.id || null,
-            class: (el.className && typeof el.className === 'string') ? el.className.slice(0, 80) : null,
-            text: (el.textContent || '').trim().slice(0, 100),
-        }));
-        return {
-            ok: false,
-            visibleCheckboxCount: renderedBoxes.length,
-            allCheckboxCount: allBoxes.length,
-            diagnostic: anyAccept,
-        };
-    }"""
-
-    result = None
-    last_dump = None
-    for attempt in range(40):  # 40 * 500ms = 20s
-        try:
-            result = page.evaluate(probe_js)
-        except Exception as e:
-            print(f"  [ACCEPT] probe raised: {e}")
-            result = None
-        if result and result.get("ok"):
-            if attempt > 0:
-                print(f"  [ACCEPT] Button appeared on attempt {attempt + 1} (~{attempt * 0.5:.1f}s wait)")
-            break
-        last_dump = result
-        page.wait_for_timeout(500)
-
-    if not result or not result.get("ok"):
-        print(f"  [ACCEPT-DEBUG] Last probe result: {last_dump}")
-        _fatal(page, "Could not locate Routing Disclaimer 'Accept' element on Review & Submit (waited 20s)")
-
-    kind = result.get("kind")
-    print(f"  [ACCEPT] Found ({kind}): {result.get('matched')}")
-    el = page.locator('[data-claude-accept="1"]').first
+    # Wait for ajax overlay to clear
     try:
-        el.scroll_into_view_if_needed(timeout=5000)
-    except Exception:
+        page.locator('#ajaxBusy').wait_for(state="hidden", timeout=15_000)
+    except PlaywrightTimeoutError:
         pass
-    try:
-        if kind == "checkbox":
-            try:
-                el.check(timeout=5000)
-            except Exception:
-                el.click(force=True, timeout=5000)
-        else:
-            el.click(timeout=5000)
-    except Exception as e:
-        _fatal(page, f"Could not click Accept element: {e}")
-    print("  [ACCEPT] Click dispatched")
+    time.sleep(2)
 
-    # The Accept click triggers a KO change handler which revalidates the Review tab
-    # and enables the Submit button. Rushing straight into Submit fires while the
-    # button is still disabled / mid-rerender, and the click silently no-ops. Wait
-    # patiently for network idle, then give the KO formatters another beat.
+    # Scroll down to make sure checkbox is in view
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
+
+    # Find the RouteConditionsAccepted checkbox and check it with Playwright
+    # (force=True bypasses the ajaxBusy overlay)
+    checked = False
+    for attempt in range(20):
+        # Try the known ID first
+        for sel in ['#RouteConditionsAccepted', 'input[type="checkbox"][id*="Accept" i]',
+                    'input[type="checkbox"][id*="Condition" i]']:
+            try:
+                cb = page.locator(sel).first
+                if cb.is_visible(timeout=1_000) and not cb.is_checked():
+                    cb.check(force=True)
+                    print(f'  [ACCEPT] Checked via {sel}')
+                    checked = True
+                    break
+            except Exception:
+                continue
+        if checked:
+            break
+        if attempt < 19:
+            time.sleep(1)
+
+    if not checked:
+        # Fallback: check ALL visible unchecked checkboxes via Playwright
+        all_cbs = page.locator('input[type="checkbox"]').all()
+        for cb in all_cbs:
+            try:
+                if cb.is_visible() and not cb.is_checked():
+                    cb.check(force=True)
+                    print(f'  [ACCEPT] Checked fallback checkbox')
+                    checked = True
+            except Exception:
+                continue
+
+    if not checked:
+        print("  [ACCEPT] No unchecked checkboxes found")
+
+    # Wait for the checkbox change to enable the Submit button
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
     except PlaywrightTimeoutError:
         pass
     page.wait_for_timeout(2500)
-    _screenshot(page, "disclaimer_accepted")
 
 
 def _click_submit_on_review(page: Page):
@@ -1771,6 +1651,12 @@ def _click_submit_on_review(page: Page):
     leaving the Review tab.
     """
     print("\n[ACT] Clicking Submit on Review & Submit...")
+
+    # Wait for any ajax overlay to clear
+    try:
+        page.locator('#ajaxBusy').wait_for(state="hidden", timeout=15_000)
+    except PlaywrightTimeoutError:
+        pass
 
     # 1. Find the *visible, enabled* Submit button on the Review tab and tag it.
     #    The page has multiple "Submit" buttons across hidden forms — plain
@@ -1873,7 +1759,6 @@ def _click_submit_on_review(page: Page):
     # Give the Payment tab DOM another beat to fully render before the caller
     # tries to activate it.
     page.wait_for_timeout(2500)
-    _screenshot(page, "submitted")
 
 
 def _proceed_to_secure_checkout(page: Page):
@@ -2052,7 +1937,6 @@ def _proceed_to_secure_checkout(page: Page):
     else:
         _fatal(page, f"SecureCheckout page did not load after 30s. URL still: {page.url}")
 
-    _screenshot(page, "secure_checkout_reached")
     print("[STOP] =============================================")
     print("[STOP] SecureCheckout page reached — stopping before card entry.")
     print("[STOP] =============================================\n")
@@ -2076,7 +1960,6 @@ def _save_and_route(page: Page, permit_type: str, extra: dict):
     except Exception as e:
         _fatal(page, f"Could not click Save: {e}")
 
-    _screenshot(page, "saved")
     print("[OK] Saved")
 
     is_blanket = permit_type.startswith("fl_blanket_")
@@ -2091,7 +1974,6 @@ def _save_and_route(page: Page, permit_type: str, extra: dict):
 
     # All FL variants land on Review & Submit next.
     _activate_tab(page, "Review & Submit", ["review"], settle_ms=1800)
-    _screenshot(page, "review_reached")
 
     # Routing Disclaimer "Accept" checkbox — only exists on OS/OW (routing permits).
     # Blanket permits skip straight to Submit with no disclaimer checkbox.
@@ -2206,11 +2088,9 @@ def run(
                 "permitType": permit_type,
                 "status": "success",
                 "message": "SecureCheckout page reached — stopping before card entry",
-                "screenshot": screenshot_path,
             }
 
         except PermitError as e:
-            # _fatal already printed [FATAL] and took an error screenshot.
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,
@@ -2220,18 +2100,9 @@ def run(
                 "message": str(e),
             }
         except Exception as e:
-            # Unhandled exception — print the full traceback so Celery shows WHERE
-            # it died instead of the task silently reporting "Done — 0/1 succeeded".
             import traceback
             print(f"\n  [UNEXPECTED] {type(e).__name__}: {e}")
             print("  " + traceback.format_exc().replace("\n", "\n  "))
-            err_shot = ""
-            try:
-                err_shot = os.path.join(_screenshot_dir, f"UNEXPECTED_{int(time.time() * 1000)}.png")
-                page.screenshot(path=err_shot, full_page=True, timeout=10000)
-                print(f"  [UNEXPECTED] Error screenshot: {err_shot}")
-            except Exception:
-                err_shot = ""
             return {
                 "permitId": permit_id,
                 "driverName": driver_name,
@@ -2239,7 +2110,6 @@ def run(
                 "permitType": permit_type,
                 "status": "error",
                 "message": f"Unexpected {type(e).__name__}: {e}",
-                "screenshot": err_shot,
             }
         finally:
             time.sleep(3)
