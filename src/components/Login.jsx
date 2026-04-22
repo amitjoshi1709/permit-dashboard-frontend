@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { login } from "../api";
+import logo from "../assets/logo.png";
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState("");
@@ -22,16 +23,24 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-navy">
-      <div className="w-full max-w-[380px] bg-navy-2 border border-subtle rounded-[14px] p-8">
-        <div className="text-center mb-6">
-          <div className="text-[22px] font-bold text-txt-1">PermitFlo</div>
-          <div className="text-[12px] text-txt-3 mt-1">Sign in to continue</div>
+    <div className="min-h-screen flex items-center justify-center bg-bone px-6">
+      <div className="w-full max-w-[400px] bg-white border border-ink/15 p-10">
+        <div className="flex items-center gap-4 mb-8">
+          <img src={logo} alt="PermitFlo" className="w-14 h-14 object-contain rounded-sm bg-steel-900/5 p-1.5" />
+          <div>
+            <div className="font-serif font-black text-2xl text-steel-900 leading-none">PermitFlo</div>
+            <div className="text-[10px] text-amber-600 font-semibold uppercase tracking-[0.22em] mt-1.5">
+              Est. 2025
+            </div>
+          </div>
         </div>
+
+        <div className="eyebrow mb-2">Sign in</div>
+        <span className="amber-rule mb-6" />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-2">
               Username
             </label>
             <input
@@ -45,7 +54,7 @@ export default function Login({ onLogin }) {
           </div>
 
           <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-2">
               Password
             </label>
             <input
@@ -58,7 +67,7 @@ export default function Login({ onLogin }) {
           </div>
 
           {error && (
-            <div className="text-[12px] text-permit-red2 bg-permit-red2/10 border border-permit-red2/30 rounded-md px-3 py-2">
+            <div className="text-[12px] text-[#7A2C22] bg-[#9C3A2E]/10 border border-[#9C3A2E]/30 rounded-sm px-3 py-2">
               {error}
             </div>
           )}
@@ -66,13 +75,13 @@ export default function Login({ onLogin }) {
           <button
             type="submit"
             disabled={loading || !username || !password}
-            className={`w-full py-3 rounded-lg text-sm font-medium transition-all font-sans border-none ${
+            className={`w-full py-3 rounded-sm text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors border-none ${
               loading || !username || !password
-                ? "bg-navy-3 text-txt-3 cursor-not-allowed"
-                : "bg-accent text-white hover:bg-accent-2 cursor-pointer"
+                ? "bg-stone-100 text-ink-400 cursor-not-allowed"
+                : "bg-amber text-white hover:bg-amber-600 cursor-pointer"
             }`}
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>

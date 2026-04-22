@@ -45,7 +45,7 @@ export default function DynamicFields({ fields, values, onChange, disabled }) {
   }
 
   return (
-    <div className="space-y-4 p-4 rounded-lg border border-accent/25 bg-accent/5">
+    <div className="space-y-4 p-4 rounded-sm border border-amber/30 bg-amber/5">
       {plan.map((item, idx) => {
         if (item.type === "pair") {
           return (
@@ -59,7 +59,7 @@ export default function DynamicFields({ fields, values, onChange, disabled }) {
         }
         return (
           <div key={item.name}>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2 mb-2">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-amber-600 mb-2">
               {item.name}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -85,8 +85,8 @@ export default function DynamicFields({ fields, values, onChange, disabled }) {
 // stack vertically inside so the card fits comfortably next to its pair.
 function LocationCard({ title, fields, values, onChange, disabled }) {
   return (
-    <div className="rounded-lg border border-subtle bg-navy-2/40 p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2 mb-2">
+    <div className="rounded-sm border border-ink/15 bg-white/40 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-amber-600 mb-2">
         {title}
       </div>
       <div className="space-y-2">
@@ -112,7 +112,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
   if (type === "text" || type === "number") {
     return (
       <div>
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <input
           type={type}
           placeholder={placeholder || ""}
@@ -128,7 +128,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
   if (type === "select") {
     return (
       <div>
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <select
           value={value || ""}
           onChange={(e) => onChange(key, e.target.value)}
@@ -149,14 +149,14 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
   if (type === "textarea") {
     return (
       <div className="col-span-2">
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <textarea
           placeholder={placeholder || ""}
           value={value || ""}
           onChange={(e) => onChange(key, e.target.value)}
           disabled={disabled}
           rows={3}
-          className="w-full bg-navy-3 border border-subtle text-txt-1 rounded-lg px-3 py-2 text-[13px] resize-none focus:border-accent/50 focus:outline-none transition-colors"
+          className="w-full bg-bone-3 border border-ink/15 text-steel-900 rounded-sm px-3 py-2 text-[13px] resize-none focus:border-amber/40/50 focus:outline-none transition-colors"
         />
       </div>
     );
@@ -167,7 +167,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
     const current = value === true || value === "yes";
     return (
       <div>
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <div className="flex gap-2">
           {["Yes", "No"].map((opt) => {
             const isActive = opt === "Yes" ? current : value === false || value === "no";
@@ -177,10 +177,10 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
                 type="button"
                 onClick={() => onChange(key, opt === "Yes" ? "yes" : "no")}
                 disabled={disabled}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                className={`flex-1 py-2 rounded-sm text-xs font-medium border transition-colors cursor-pointer ${
                   isActive
-                    ? "bg-accent/15 border-accent/40 text-accent-2"
-                    : "bg-navy-3 border-subtle text-txt-2 hover:border-subtle2"
+                    ? "bg-amber/15 border-amber/40 text-amber-600"
+                    : "bg-bone-3 border-ink/15 text-ink-500 hover:border-ink/20"
                 } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 {opt}
@@ -197,7 +197,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
     const val = value || { ft: "", in: "" };
     return (
       <div>
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <div className="flex items-center gap-1.5">
           <input
             type="number"
@@ -206,9 +206,9 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
             value={val.ft || ""}
             onChange={(e) => onChange(key, { ...val, ft: e.target.value })}
             disabled={disabled}
-            className="w-16 bg-navy-3 border border-subtle text-txt-1 rounded-md px-2 py-1.5 text-[12px] text-center focus:border-accent/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-16 bg-bone-3 border border-ink/15 text-steel-900 rounded-sm px-2 py-1.5 text-[12px] text-center focus:border-amber/40/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          <span className="text-[10px] text-txt-3 font-medium">ft</span>
+          <span className="text-[10px] text-ink-400 font-medium">ft</span>
           <input
             type="number"
             min="0"
@@ -217,9 +217,9 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
             value={val.in || ""}
             onChange={(e) => onChange(key, { ...val, in: e.target.value })}
             disabled={disabled}
-            className="w-14 bg-navy-3 border border-subtle text-txt-1 rounded-md px-2 py-1.5 text-[12px] text-center focus:border-accent/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-14 bg-bone-3 border border-ink/15 text-steel-900 rounded-sm px-2 py-1.5 text-[12px] text-center focus:border-amber/40/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          <span className="text-[10px] text-txt-3 font-medium">in</span>
+          <span className="text-[10px] text-ink-400 font-medium">in</span>
         </div>
       </div>
     );
@@ -236,7 +236,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
 
     return (
       <div className="col-span-2">
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: spacingCount }, (_, i) => {
             const pair = (spacings[i] && typeof spacings[i] === "object") ? spacings[i] : { ft: "", in: "" };
@@ -248,7 +248,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
             };
             return (
               <div key={i}>
-                <label className="block text-[10px] text-txt-3 mb-1">
+                <label className="block text-[10px] text-ink-400 mb-1">
                   Axle {i + 1} → {i + 2}
                 </label>
                 <div className="flex items-center gap-1.5">
@@ -259,9 +259,9 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
                     value={pair.ft || ""}
                     onChange={(e) => updatePair({ ...pair, ft: e.target.value })}
                     disabled={disabled}
-                    className="w-16 bg-navy-3 border border-subtle text-txt-1 rounded-md px-2 py-1.5 text-[12px] text-center focus:border-accent/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-16 bg-bone-3 border border-ink/15 text-steel-900 rounded-sm px-2 py-1.5 text-[12px] text-center focus:border-amber/40/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-[10px] text-txt-3 font-medium">ft</span>
+                  <span className="text-[10px] text-ink-400 font-medium">ft</span>
                   <input
                     type="number"
                     min="0"
@@ -270,9 +270,9 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
                     value={pair.in || ""}
                     onChange={(e) => updatePair({ ...pair, in: e.target.value })}
                     disabled={disabled}
-                    className="w-14 bg-navy-3 border border-subtle text-txt-1 rounded-md px-2 py-1.5 text-[12px] text-center focus:border-accent/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-14 bg-bone-3 border border-ink/15 text-steel-900 rounded-sm px-2 py-1.5 text-[12px] text-center focus:border-amber/40/50 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-[10px] text-txt-3 font-medium">in</span>
+                  <span className="text-[10px] text-ink-400 font-medium">in</span>
                 </div>
               </div>
             );
@@ -292,11 +292,11 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
 
     return (
       <div className="col-span-2">
-        <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+        <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
         <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: count }, (_, i) => (
             <div key={i}>
-              <label className="block text-[10px] text-txt-3 mb-1">
+              <label className="block text-[10px] text-ink-400 mb-1">
                 Axle {i + 1}
               </label>
               <input
@@ -322,7 +322,7 @@ function FieldRenderer({ field, value, allValues, onChange, disabled }) {
   // Fallback — unknown type, render as text
   return (
     <div>
-      <label className="block text-[10px] text-txt-3 mb-1">{label}</label>
+      <label className="block text-[10px] text-ink-400 mb-1">{label}</label>
       <input
         type="text"
         placeholder={placeholder || ""}

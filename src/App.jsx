@@ -48,7 +48,7 @@ export default function App() {
   }
 
   if (authState === "checking") {
-    return <div className="min-h-screen flex items-center justify-center bg-navy text-txt-3 text-[13px]">Loading...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-bone text-ink-400 text-[13px]">Loading…</div>;
   }
 
   if (authState === "unauthed") {
@@ -56,11 +56,11 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-bone text-ink">
       <Sidebar activeView={activeView} onNavigate={setActiveView} />
-      <main className="ml-[220px] flex-1">
+      <main className="ml-[240px] flex-1 flex flex-col min-h-screen">
         <Topbar activeView={activeView} onNewPermit={() => setActiveView("order")} />
-        <div className="p-7">
+        <div className="flex-1 px-8 lg:px-12 py-10 max-w-[1400px] w-full">
           {renderView()}
         </div>
       </main>

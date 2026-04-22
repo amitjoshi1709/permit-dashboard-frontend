@@ -4,37 +4,83 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body, #root { min-height: 100vh; }
+
 body {
-  font-family: "DM Sans", sans-serif;
-  background: #0D1B2A;
-  color: #EDF2F7;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #EDE7DB;
+  color: #111315;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
 }
+
+/* Headings default to Merriweather */
+h1, h2, h3, h4 { font-family: "Merriweather", Georgia, serif; color: #0E1E30; }
 
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #0D1B2A; }
-::-webkit-scrollbar-thumb { background: #2C4B6E; border-radius: 10px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #EDE7DB; }
+::-webkit-scrollbar-thumb {
+  background: #DDD4C2;
+  border-radius: 999px;
+  border: 2px solid #EDE7DB;
+}
+::-webkit-scrollbar-thumb:hover { background: #B5631F; }
 
 /* Form inputs */
-select, input[type="text"], input[type="email"], input[type="tel"], input[type="date"], input[type="time"], input[type="number"], input[type="password"] {
+select,
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="password"],
+textarea {
   width: 100%;
-  background: #1D2E44;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 8px;
-  color: #EDF2F7;
+  background: #FFFFFF;
+  border: 1px solid rgba(17, 19, 21, 0.22);
+  border-radius: 2px;
+  color: #111315;
   font-family: inherit;
   font-size: 13px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   outline: none;
-  transition: border 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-select:focus, input:focus { border-color: #4A9DDA; }
+
+select:focus,
+input:focus,
+textarea:focus {
+  border-color: #B5631F;
+  box-shadow: 0 0 0 1px #B5631F;
+}
+
 select { cursor: pointer; }
-input::placeholder { color: #6B8CAE; }
+input::placeholder, textarea::placeholder { color: #5A636C; }
+
 input[type="number"] { -moz-appearance: textfield; }
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Eyebrow utility */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: #924E16;
+}
+
+/* Amber divider rule */
+.amber-rule {
+  display: block;
+  height: 2px;
+  width: 64px;
+  background: #B5631F;
+}
+
+::selection { background: #D9923F; color: #0E1E30; }

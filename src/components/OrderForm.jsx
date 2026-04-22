@@ -739,16 +739,16 @@ export default function OrderForm({ onToast }) {
   }, 0);
 
   return (
-    <div className="bg-navy-2 border border-subtle rounded-[14px]">
-      <div className="px-[18px] py-3.5 border-b border-subtle flex items-center gap-2.5">
+    <div className="bg-white border border-ink/15">
+      <div className="px-[18px] py-3.5 border-b border-ink/15 flex items-center gap-2.5">
         <div className="text-[13.5px] font-semibold">New Permit Request</div>
         {processing && (
-          <span className="text-[11px] text-[#FFD166] bg-permit-orange/15 rounded-md px-2 py-0.5 animate-pulse">
+          <span className="text-[11px] text-amber-600 bg-amber/15 rounded-sm px-2 py-0.5 animate-pulse">
             Processing...
           </span>
         )}
         {queue.length > 0 && !processing && (
-          <span className="text-[11px] text-accent-2 bg-accent/10 rounded-md px-2 py-0.5">
+          <span className="text-[11px] text-amber-600 bg-amber/10 rounded-sm px-2 py-0.5">
             {queue.length} in cart
           </span>
         )}
@@ -760,7 +760,7 @@ export default function OrderForm({ onToast }) {
           <div className="space-y-4">
             {/* State selector — single dropdown */}
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 State
               </label>
               <select
@@ -774,7 +774,7 @@ export default function OrderForm({ onToast }) {
                 ))}
               </select>
               {isGA && (
-                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-1.5">
+                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-sm bg-amber/10 border border-amber/30 text-amber-600 flex items-start gap-1.5">
                   <span className="flex-shrink-0 mt-px">{"\u26a0"}</span>
                   <span>Georgia enforces a <strong>45-minute cooldown</strong> between permit purchases. Add all GA drivers/permits to the cart before ordering — you won't be able to order more until the cooldown expires.</span>
                 </div>
@@ -783,7 +783,7 @@ export default function OrderForm({ onToast }) {
 
             {/* Permit Type */}
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Permit Type
               </label>
               <select
@@ -799,7 +799,7 @@ export default function OrderForm({ onToast }) {
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Effective Date & Time
               </label>
               <div className="flex gap-2">
@@ -820,7 +820,7 @@ export default function OrderForm({ onToast }) {
                 />
               </div>
               {isFlatbed && (
-                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166]">
+                <div className="text-[11px] mt-1.5 px-2.5 py-1.5 rounded-sm bg-amber/10 border border-amber/30 text-amber-600">
                   {"\u26a0"} Reminder: travel begin date must be <strong>2 WORK DAYS LATER</strong> than submission.
                 </div>
               )}
@@ -839,7 +839,7 @@ export default function OrderForm({ onToast }) {
             {/* Driver search — moved above insurance so insurance can auto-fill
                 from the selected driver type the moment GA is chosen. */}
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Driver(s)
               </label>
 
@@ -849,12 +849,12 @@ export default function OrderForm({ onToast }) {
                     const d = drivers.find((dr) => dr.id === id);
                     if (!d) return null;
                     return (
-                      <span key={id} className="inline-flex items-center gap-1 bg-accent/15 border border-accent/30 text-accent-2 text-[11px] font-medium px-2 py-1 rounded-md">
+                      <span key={id} className="inline-flex items-center gap-1 bg-amber/15 border border-amber/30 text-amber-600 text-[11px] font-medium px-2 py-1 rounded-sm">
                         {d.name}
                         <button
                           onClick={() => removeDriver(id)}
                           disabled={busy}
-                          className="hover:text-white transition-colors cursor-pointer leading-none bg-transparent border-none text-accent-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="hover:text-white transition-colors cursor-pointer leading-none bg-transparent border-none text-amber-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           x
                         </button>
@@ -865,25 +865,25 @@ export default function OrderForm({ onToast }) {
               )}
 
               {loading ? (
-                <p className="text-txt-3 text-[13px]">Loading drivers...</p>
+                <p className="text-ink-400 text-[13px]">Loading drivers...</p>
               ) : (
                 <div className="relative">
                   <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type a name, tractor #, or ID..." disabled={busy} />
                   {searchResults.length > 0 && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] max-h-60 overflow-y-auto">
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-ink/20 rounded-sm overflow-hidden shadow-card max-h-60 overflow-y-auto">
                       {searchResults.slice(0, 20).map((driver) => (
-                        <button key={driver.id} onClick={() => addDriver(driver.id)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-navy-3 transition-colors cursor-pointer bg-transparent border-none text-txt-1 font-sans">
-                          <div className="w-6 h-6 rounded-full bg-steel flex items-center justify-center text-[9px] font-semibold text-accent-2 flex-shrink-0">
+                        <button key={driver.id} onClick={() => addDriver(driver.id)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-stone-100 transition-colors cursor-pointer bg-transparent border-none text-steel-900 font-sans">
+                          <div className="w-6 h-6 rounded-full bg-stone-100 border border-ink/15 flex items-center justify-center text-[9px] font-semibold text-amber-600 flex-shrink-0">
                             {(driver.name || "").substring(0, 2).toUpperCase()}
                           </div>
                           <span>{driver.name}</span>
-                          <span className="ml-auto text-[11px] font-mono text-txt-3">{driver.tractor}</span>
+                          <span className="ml-auto text-[11px] font-mono text-ink-400">{driver.tractor}</span>
                         </button>
                       ))}
                     </div>
                   )}
                   {search.trim() && searchResults.length === 0 && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg px-3 py-2.5 text-[13px] text-txt-3">No drivers found.</div>
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-ink/20 rounded-sm px-3 py-2.5 text-[13px] text-ink-400">No drivers found.</div>
                   )}
                 </div>
               )}
@@ -891,17 +891,17 @@ export default function OrderForm({ onToast }) {
 
             {/* Insurance — only required by Georgia portal right now */}
             {insuranceRequired && (
-              <div className="rounded-lg border border-accent/30 bg-accent/5 p-3.5">
+              <div className="rounded-sm border border-amber/30 bg-amber/5 p-3.5">
                 <div className="flex items-center justify-between mb-2.5">
-                  <div className="text-[11px] font-medium uppercase tracking-wide text-accent-2">
-                    Insurance Info <span className="text-txt-3 normal-case font-normal">— required for Georgia</span>
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-amber-600">
+                    Insurance Info <span className="text-ink-400 normal-case font-normal">— required for Georgia</span>
                   </div>
                   {allSelectedAreMega && !insuranceUnlocked && selectedDrivers.length > 0 && (
                     <button
                       type="button"
                       onClick={handleUnlockInsurance}
                       disabled={busy}
-                      className="text-[10px] text-txt-3 hover:text-accent-2 bg-transparent border-none cursor-pointer transition-colors inline-flex items-center gap-1"
+                      className="text-[10px] text-ink-400 hover:text-amber-600 bg-transparent border-none cursor-pointer transition-colors inline-flex items-center gap-1"
                     >
                       ✎ Edit
                     </button>
@@ -911,7 +911,7 @@ export default function OrderForm({ onToast }) {
                       type="button"
                       onClick={resetInsuranceToDefault}
                       disabled={busy}
-                      className="text-[10px] text-txt-3 hover:text-accent-2 bg-transparent border-none cursor-pointer transition-colors"
+                      className="text-[10px] text-ink-400 hover:text-amber-600 bg-transparent border-none cursor-pointer transition-colors"
                     >
                       ↺ Reset to default
                     </button>
@@ -919,27 +919,27 @@ export default function OrderForm({ onToast }) {
                 </div>
 
                 {selectedDrivers.length === 0 ? (
-                  <div className="text-[11px] text-txt-3">
+                  <div className="text-[11px] text-ink-400">
                     Select a driver above to auto-fill insurance info.
                   </div>
                 ) : allSelectedAreMega && !insuranceUnlocked ? (
-                  <div className="text-[11px] text-txt-3 mb-2.5 flex items-center gap-1.5">
+                  <div className="text-[11px] text-ink-400 mb-2.5 flex items-center gap-1.5">
                     <span className="text-[10px]">🔒</span>
                     Using shared Mega insurance on file. Click Edit to override for this order.
                   </div>
                 ) : allSelectedAreMega && insuranceUnlocked ? (
-                  <div className="text-[11px] text-[#FFD166] mb-2.5">
+                  <div className="text-[11px] text-amber-600 mb-2.5">
                     {"\u26a0"} Overriding Mega insurance for this order only. Changes here do NOT update the saved policy.
                   </div>
                 ) : (
-                  <div className="text-[11px] text-[#FFD166] mb-2.5">
+                  <div className="text-[11px] text-amber-600 mb-2.5">
                     {"\u26a0"} Non-Mega driver selected — enter their own insurance info.
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-medium uppercase tracking-wide text-txt-3 mb-1">
+                    <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400 mb-1">
                       Insurance Company
                     </label>
                     <input
@@ -954,7 +954,7 @@ export default function OrderForm({ onToast }) {
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[10px] font-medium uppercase tracking-wide text-txt-3 mb-1">
+                      <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400 mb-1">
                         Effective Date
                       </label>
                       <input
@@ -968,7 +968,7 @@ export default function OrderForm({ onToast }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-medium uppercase tracking-wide text-txt-3 mb-1">
+                      <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400 mb-1">
                         Expiration Date
                       </label>
                       <input
@@ -983,7 +983,7 @@ export default function OrderForm({ onToast }) {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium uppercase tracking-wide text-txt-3 mb-1">
+                    <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400 mb-1">
                       Policy Number
                     </label>
                     <input
@@ -1004,10 +1004,10 @@ export default function OrderForm({ onToast }) {
             <button
               disabled={!canAddToQueue}
               onClick={addToQueue}
-              className={`w-full py-2.5 rounded-lg text-[13px] font-medium transition-all font-sans border ${
+              className={`w-full py-2.5 rounded-sm text-[13px] font-medium transition-all font-sans border ${
                 canAddToQueue
-                  ? "bg-accent/10 border-accent/40 text-accent-2 hover:bg-accent/20 cursor-pointer"
-                  : "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
+                  ? "bg-amber/10 border-amber/40 text-amber-600 hover:bg-amber/20 cursor-pointer"
+                  : "bg-stone-100 border-ink/15 text-ink-400 cursor-not-allowed"
               }`}
             >
               + Add to Cart
@@ -1018,35 +1018,35 @@ export default function OrderForm({ onToast }) {
           <div className="space-y-4">
             {/* Cart list */}
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Cart {queue.length > 0 && `(${queue.length})`}
               </label>
 
               {queue.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center">
-                  <div className="text-txt-3 text-[12px]">Your cart is empty.</div>
-                  <div className="text-txt-3 text-[11px] mt-1 opacity-60">Fill out the form and click "Add to Cart"</div>
+                <div className="rounded-sm border border-dashed border-ink/15 px-4 py-6 text-center">
+                  <div className="text-ink-400 text-[12px]">Your cart is empty.</div>
+                  <div className="text-ink-400 text-[11px] mt-1 opacity-60">Fill out the form and click "Add to Cart"</div>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                   {queue.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-navy-3 border border-subtle group"
+                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-sm bg-stone-100 border border-ink/15 group"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold text-accent-2">{entry.state}</span>
-                          <span className="text-[11px] text-txt-2 font-medium">{entry.permitTypeLabel}</span>
-                          <span className="text-[10px] text-txt-3">
+                          <span className="text-[11px] font-bold text-amber-600">{entry.state}</span>
+                          <span className="text-[11px] text-ink-500 font-medium">{entry.permitTypeLabel}</span>
+                          <span className="text-[10px] text-ink-400">
                             {entry.effectiveDate}{entry.effectiveTime ? ` · ${entry.effectiveTime}` : ""}
                           </span>
                         </div>
-                        <div className="text-[11px] text-txt-3 truncate">
+                        <div className="text-[11px] text-ink-400 truncate">
                           {entry.driverNames.join(", ")}
                         </div>
                         {entry.extraFields && (
-                          <div className="text-[10px] text-txt-3 opacity-60 mt-0.5">
+                          <div className="text-[10px] text-ink-400 opacity-60 mt-0.5">
                             + extra fields attached
                           </div>
                         )}
@@ -1056,7 +1056,7 @@ export default function OrderForm({ onToast }) {
                           onClick={() => duplicateQueueEntry(entry.id)}
                           disabled={busy}
                           title="Duplicate this entry"
-                          className="text-txt-3 hover:text-accent-2 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                          className="text-ink-400 hover:text-amber-600 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
                         >
                           ⧉
                         </button>
@@ -1064,7 +1064,7 @@ export default function OrderForm({ onToast }) {
                           onClick={() => removeFromQueue(entry.id)}
                           disabled={busy}
                           title="Remove from queue"
-                          className="text-txt-3 hover:text-red-400 text-sm bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                          className="text-ink-400 hover:text-red-400 text-sm bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
                         >
                           x
                         </button>
@@ -1079,10 +1079,10 @@ export default function OrderForm({ onToast }) {
             <button
               disabled={queue.length === 0 || busy}
               onClick={handleSubmitQueue}
-              className={`w-full py-3 rounded-lg text-sm font-medium transition-all font-sans border-none ${
+              className={`w-full py-3 rounded-sm text-sm font-medium transition-all font-sans border-none ${
                 queue.length > 0 && !busy
-                  ? "bg-accent text-white hover:bg-accent-2 cursor-pointer hover:-translate-y-px"
-                  : "bg-navy-3 text-txt-3 cursor-not-allowed"
+                  ? "bg-amber text-white hover:bg-amber-600 cursor-pointer hover:-translate-y-px"
+                  : "bg-stone-100 text-ink-400 cursor-not-allowed"
               }`}
             >
               {submitting
@@ -1095,7 +1095,7 @@ export default function OrderForm({ onToast }) {
             </button>
 
             {cartHasGA && !busy && (
-              <div className="text-[11px] px-3 py-2 rounded-md bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-1.5">
+              <div className="text-[11px] px-3 py-2 rounded-sm bg-amber/10 border border-amber/30 text-amber-600 flex items-start gap-1.5">
                 <span className="flex-shrink-0 mt-px">{"\u26a0"}</span>
                 <span>Your cart includes Georgia permits. Make sure <strong>all GA permits</strong> are in the cart — the portal locks you out for 45 minutes after ordering.</span>
               </div>
@@ -1106,10 +1106,10 @@ export default function OrderForm({ onToast }) {
                 onClick={requeueLastBatch}
                 disabled={busy}
                 title="Re-add the last order's items to your cart"
-                className={`w-full py-2 rounded-lg text-[12px] font-medium transition-all font-sans border ${
+                className={`w-full py-2 rounded-sm text-[12px] font-medium transition-all font-sans border ${
                   busy
-                    ? "bg-navy-3 border-subtle text-txt-3 cursor-not-allowed"
-                    : "bg-navy-3 border-subtle2 text-txt-2 hover:border-accent/40 hover:text-accent-2 cursor-pointer"
+                    ? "bg-stone-100 border-ink/15 text-ink-400 cursor-not-allowed"
+                    : "bg-stone-100 border-ink/20 text-ink-500 hover:border-amber/40 hover:text-amber-600 cursor-pointer"
                 }`}
               >
                 {"\u21bb"} Re-add last order to cart ({lastBatch.length})
@@ -1117,7 +1117,7 @@ export default function OrderForm({ onToast }) {
             )}
 
             {waitingCaptcha && (
-              <button onClick={handleCaptchaContinue} className="w-full py-3 rounded-lg text-sm font-semibold transition-all font-sans border-none bg-[#e85d04] text-white hover:bg-[#d45303] cursor-pointer animate-pulse">
+              <button onClick={handleCaptchaContinue} className="w-full py-3 rounded-sm text-sm font-semibold transition-all font-sans border-none bg-[#e85d04] text-white hover:bg-[#d45303] cursor-pointer animate-pulse">
                 CAPTCHA Detected — Solve in Browser, Then Click Here to Continue
               </button>
             )}

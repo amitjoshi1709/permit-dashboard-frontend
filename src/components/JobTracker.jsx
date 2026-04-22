@@ -38,25 +38,25 @@ export default function JobTracker({ jobs, onClear }) {
   }
 
   return (
-    <div className="bg-navy/80 border border-subtle rounded-lg overflow-hidden">
+    <div className="bg-white border border-ink/15 rounded-sm overflow-hidden">
       {/* Header */}
-      <div className="px-3.5 py-2.5 border-b border-subtle">
+      <div className="px-3.5 py-2.5 border-b border-ink/15">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-semibold text-txt-1 text-[12px]">
+          <span className="font-semibold text-steel-900 text-[12px]">
             {total === 0 ? "Order History"
               : allDone ? "Order Complete"
               : "Order Status"}
           </span>
           <div className="flex items-center gap-2.5">
             {total > 0 && (
-              <span className="text-[11px] text-txt-3">
+              <span className="text-[11px] text-ink-400">
                 {completed + failed} / {total} done
               </span>
             )}
             {total > 0 && onClear && (
               <button
                 onClick={handleClear}
-                className="text-[11px] text-txt-3 hover:text-permit-red2 cursor-pointer bg-transparent border-none font-sans transition-colors"
+                className="text-[11px] text-ink-400 hover:text-[#7A2C22] cursor-pointer bg-transparent border-none font-sans transition-colors"
               >
                 Clear history
               </button>
@@ -65,7 +65,7 @@ export default function JobTracker({ jobs, onClear }) {
         </div>
 
         {/* Progress bar */}
-        <div className="w-full h-1.5 bg-navy-3 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-bone-3 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{
@@ -78,29 +78,29 @@ export default function JobTracker({ jobs, onClear }) {
         {/* Counts */}
         {total > 0 && (
           <div className="flex gap-3 mt-1.5 text-[10px]">
-            {queued > 0 && <span className="text-txt-3">{queued} queued</span>}
-            {inProgress > 0 && <span className="text-accent-2">{inProgress} running</span>}
-            {completed > 0 && <span className="text-[#3EDB7A]">{completed} completed</span>}
-            {failed > 0 && <span className="text-permit-red2">{failed} failed</span>}
+            {queued > 0 && <span className="text-ink-400">{queued} queued</span>}
+            {inProgress > 0 && <span className="text-amber-600">{inProgress} running</span>}
+            {completed > 0 && <span className="text-[#2E6A3B]">{completed} completed</span>}
+            {failed > 0 && <span className="text-[#7A2C22]">{failed} failed</span>}
           </div>
         )}
       </div>
 
       {/* Permit list — empty state if nothing yet */}
       {total === 0 ? (
-        <div className="py-6 text-center text-txt-3 text-[12px]">
+        <div className="py-6 text-center text-ink-400 text-[12px]">
           No permits ordered yet. Your order history will appear here.
         </div>
       ) : (
-        <div className="max-h-96 overflow-y-auto divide-y divide-subtle/40">
+        <div className="max-h-96 overflow-y-auto divide-y divide-ink/10">
           {sorted.map((p, i) => (
             <div
               key={p.permitId || `p-${i}`}
               className={`flex items-center gap-2 px-3.5 py-2.5 text-[12px] transition-colors ${
                 p.status === "success"
-                  ? "bg-[#3EDB7A]/5"
+                  ? "bg-[#2E6A3B]/[0.05]"
                   : p.status === "error"
-                  ? "bg-permit-red2/5"
+                  ? "bg-[#9C3A2E]/[0.04]"
                   : p.status === "pending"
                   ? "opacity-60"
                   : ""
@@ -109,38 +109,38 @@ export default function JobTracker({ jobs, onClear }) {
               {/* Status indicator */}
               <div className="flex-shrink-0 w-5 text-center text-[13px]">
                 {p.status === "success" ? (
-                  <span className="text-[#3EDB7A]">✓</span>
+                  <span className="text-[#2E6A3B]">✓</span>
                 ) : p.status === "error" ? (
-                  <span className="text-permit-red2">✗</span>
+                  <span className="text-[#7A2C22]">✗</span>
                 ) : p.status === "pending" ? (
-                  <span className="text-txt-3">○</span>
+                  <span className="text-ink-400">○</span>
                 ) : (
-                  <span className="text-accent-2 animate-pulse">◉</span>
+                  <span className="text-amber-600 animate-pulse">◉</span>
                 )}
               </div>
 
               {/* Driver avatar */}
-              <div className="w-5 h-5 rounded-full bg-steel flex items-center justify-center text-[8px] font-semibold text-accent-2 flex-shrink-0">
+              <div className="w-5 h-5 rounded-full bg-stone-100 border border-ink/15 flex items-center justify-center text-[8px] font-semibold text-amber-600 flex-shrink-0">
                 {(p.driverName || "??").substring(0, 2).toUpperCase()}
               </div>
 
               {/* Driver name + tractor */}
               <div className="flex-1 min-w-0">
-                <div className="text-txt-1 truncate">
+                <div className="text-steel-900 truncate">
                   {p.driverName || "—"}
                   {p.tractor && (
-                    <span className="text-txt-3 ml-1.5 font-mono text-[10px]">{p.tractor}</span>
+                    <span className="text-ink-400 ml-1.5 font-mono text-[10px]">{p.tractor}</span>
                   )}
                 </div>
                 {p.status === "error" && p.message && (
-                  <div className="text-[10px] text-permit-red2 truncate" title={p.message}>
+                  <div className="text-[10px] text-[#7A2C22] truncate" title={p.message}>
                     {p.message}
                   </div>
                 )}
               </div>
 
               {/* State */}
-              <span className="text-[10px] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded flex-shrink-0">
+              <span className="text-[10px] font-bold text-amber-600 px-1.5 py-0.5 bg-amber/10 rounded flex-shrink-0">
                 {p.state || "—"}
               </span>
 
@@ -151,10 +151,10 @@ export default function JobTracker({ jobs, onClear }) {
 
               {/* Status + time */}
               <span className={`text-[10px] flex-shrink-0 text-right ${
-                p.status === "success" ? "text-[#3EDB7A]"
-                  : p.status === "error" ? "text-permit-red2"
-                  : p.status === "pending" ? "text-txt-3"
-                  : "text-accent-2"
+                p.status === "success" ? "text-[#2E6A3B]"
+                  : p.status === "error" ? "text-[#7A2C22]"
+                  : p.status === "pending" ? "text-ink-400"
+                  : "text-amber-600"
               }`}>
                 {p.status === "success" ? (p.finishedAt || "Done")
                   : p.status === "error" ? (p.finishedAt ? `Failed ${p.finishedAt}` : "Failed")

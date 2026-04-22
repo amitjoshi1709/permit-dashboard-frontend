@@ -30,6 +30,7 @@ from scripts.georgia_osow.runner import run as run_georgia_osow
 from scripts.arkansas_trip.runner import run as run_arkansas_trip
 from scripts.florida_trip.runner import run as run_florida_trip
 from scripts.mississippi_trip.runner import run as run_mississippi_trip
+from scripts.south_carolina_trip.runner import run as run_south_carolina_trip
 
 # Registry key: (state, permitType) for state+type-specific runners.
 # Fallback: (state, None) matches any permit type for that state.
@@ -55,6 +56,9 @@ SCRIPT_REGISTRY = {
     ("FL", "fl_blanket_inner_bridge"): run_florida_trip,
     ("FL", "fl_blanket_flatbed"):      run_florida_trip,
     ("MS", None):                      run_mississippi_trip,
+    ("SC", "trip"):                    run_south_carolina_trip,
+    ("SC", "fuel"):                    run_south_carolina_trip,
+    ("SC", "trip_fuel"):               run_south_carolina_trip,
 }
 
 

@@ -196,23 +196,23 @@ export default function HistoryTable({ onNavigate, onToast }) {
   }
 
   return (
-    <div className="bg-navy-2 border border-subtle rounded-[14px]">
-      <div className="px-[18px] py-3.5 border-b border-subtle flex items-center gap-2.5">
+    <div className="bg-white border border-ink/15">
+      <div className="px-[18px] py-3.5 border-b border-ink/15 flex items-center gap-2.5">
         <div className="text-[13.5px] font-semibold">Permit History</div>
-        <span className="text-[11px] text-txt-3 bg-navy-3 rounded-[10px] px-2 py-0.5">
+        <span className="text-[11px] text-ink-400 bg-stone-100 rounded-sm px-2 py-0.5">
           {filtered.length} {filtered.length === 1 ? "permit" : "permits"}
         </span>
         {!selectMode ? (
           <button
             onClick={enterSelectMode}
-            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium cursor-pointer bg-navy-3 border border-subtle2 text-txt-2 hover:bg-accent/10 hover:border-accent/40 hover:text-accent-2 transition-all font-sans"
+            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-sm text-[11px] font-medium cursor-pointer bg-stone-100 border border-ink/20 text-ink-500 hover:bg-amber/10 hover:border-amber/40 hover:text-amber-600 transition-all font-sans"
           >
             ⧉ Duplicate permits
           </button>
         ) : (
           <button
             onClick={exitSelectMode}
-            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium cursor-pointer bg-transparent border border-subtle2 text-txt-3 hover:text-txt-1 transition-all font-sans"
+            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-sm text-[11px] font-medium cursor-pointer bg-transparent border border-ink/20 text-ink-400 hover:text-steel-900 transition-all font-sans"
           >
             Cancel
           </button>
@@ -231,16 +231,16 @@ export default function HistoryTable({ onNavigate, onToast }) {
             {driverSearch && (
               <button
                 onClick={() => { setDriverSearch(""); setShowSuggestions(false); }}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-txt-3 hover:text-txt-1 bg-transparent border-none cursor-pointer text-sm leading-none"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-steel-900 bg-transparent border-none cursor-pointer text-sm leading-none"
                 title="Clear"
               >
                 ×
               </button>
             )}
             {showSuggestions && driverSuggestions.length > 0 && (
-              <div className="absolute z-20 left-0 right-0 mt-1 bg-navy-2 border border-subtle2 rounded-lg overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] max-h-64 overflow-y-auto">
+              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-ink/20 rounded-sm overflow-hidden shadow-card max-h-64 overflow-y-auto">
                 {!driverSearch && (
-                  <div className="px-2.5 py-1.5 text-[9px] uppercase tracking-wide text-txt-3 bg-navy-3/40 border-b border-subtle">
+                  <div className="px-2.5 py-1.5 text-[9px] uppercase tracking-wide text-ink-400 bg-stone-100/40 border-b border-ink/15">
                     Most Common
                   </div>
                 )}
@@ -252,22 +252,22 @@ export default function HistoryTable({ onNavigate, onToast }) {
                       setDriverSearch(d.name);
                       setShowSuggestions(false);
                     }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[12px] hover:bg-navy-3 transition-colors cursor-pointer bg-transparent border-none text-txt-1 font-sans"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[12px] hover:bg-stone-100 transition-colors cursor-pointer bg-transparent border-none text-steel-900 font-sans"
                   >
-                    <div className="w-5 h-5 rounded-full bg-steel flex items-center justify-center text-[8px] font-semibold text-accent-2 flex-shrink-0">
+                    <div className="w-5 h-5 rounded-full bg-stone-100 border border-ink/15 flex items-center justify-center text-[8px] font-semibold text-amber-600 flex-shrink-0">
                       {(d.name || "??").substring(0, 2).toUpperCase()}
                     </div>
                     <span className="flex-1 truncate">{d.name}</span>
                     {d.tractor && (
-                      <span className="text-[10px] font-mono text-txt-3 flex-shrink-0">{d.tractor}</span>
+                      <span className="text-[10px] font-mono text-ink-400 flex-shrink-0">{d.tractor}</span>
                     )}
-                    <span className="text-[10px] text-txt-3 bg-navy-3 rounded px-1 ml-1 flex-shrink-0">
+                    <span className="text-[10px] text-ink-400 bg-stone-100 rounded px-1 ml-1 flex-shrink-0">
                       {d.count}
                     </span>
                   </button>
                 ))}
                 {driverSuggestions.length > 15 && (
-                  <div className="px-2.5 py-1.5 text-[10px] text-txt-3 text-center border-t border-subtle">
+                  <div className="px-2.5 py-1.5 text-[10px] text-ink-400 text-center border-t border-ink/15">
                     {driverSuggestions.length - 15} more · keep typing
                   </div>
                 )}
@@ -299,8 +299,8 @@ export default function HistoryTable({ onNavigate, onToast }) {
 
       {/* Most-common (state + type) combos — one-click shortcuts */}
       {topCombos.length > 0 && (
-        <div className="flex items-center gap-2 px-[18px] py-2.5 border-b border-subtle flex-wrap">
-          <span className="text-[9px] uppercase tracking-wide text-txt-3 font-medium mr-1">
+        <div className="flex items-center gap-2 px-[18px] py-2.5 border-b border-ink/15 flex-wrap">
+          <span className="text-[9px] uppercase tracking-wide text-ink-400 font-medium mr-1">
             Common
           </span>
           {topCombos.map((combo) => {
@@ -311,14 +311,14 @@ export default function HistoryTable({ onNavigate, onToast }) {
                 onClick={() => applyCombo(combo)}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-[5px] rounded-full text-[11px] cursor-pointer transition-all border font-sans ${
                   active
-                    ? "bg-accent/20 border-accent/50 text-accent-2 font-medium"
-                    : "bg-navy-3 border-subtle text-txt-2 hover:bg-navy-4 hover:text-txt-1"
+                    ? "bg-amber/20 border-amber/50 text-amber-600 font-medium"
+                    : "bg-stone-100 border-ink/15 text-ink-500 hover:bg-bone-200 hover:text-steel-900"
                 }`}
                 title={`${combo.state} · ${formatPermitType(combo.type)} — ${combo.count} permits`}
               >
                 <span className="font-bold">{combo.state}</span>
                 <span className="opacity-80">{formatPermitType(combo.type)}</span>
-                <span className={`text-[9px] rounded px-1 ${active ? "bg-accent/25 text-accent-2" : "bg-navy-4 text-txt-3"}`}>
+                <span className={`text-[9px] rounded px-1 ${active ? "bg-amber/25 text-amber-600" : "bg-bone-200 text-ink-400"}`}>
                   {combo.count}
                 </span>
               </button>
@@ -328,31 +328,36 @@ export default function HistoryTable({ onNavigate, onToast }) {
       )}
 
       {/* Filter pills */}
-      <div className="flex items-center gap-2.5 px-[18px] py-3 border-b border-subtle">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setStatusFilter(f)}
-            className={`px-3 py-[5px] rounded-md text-xs cursor-pointer transition-all border font-sans ${
-              statusFilter === f
-                ? "bg-accent/15 border-accent/40 text-accent-2 font-medium"
-                : "bg-navy-3 border-subtle text-txt-2 hover:bg-navy-4 hover:text-txt-1"
-            }`}
-          >
-            {f === "all" ? "All" : f}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 px-[18px] py-3 border-b border-ink/15">
+        {STATUS_FILTERS.map((f) => {
+          const isActive = statusFilter === f;
+          const colorMap = {
+            all:     isActive ? "bg-steel-900 text-white border-steel-900"     : "bg-white border-steel/20 text-steel-900 hover:bg-stone-100",
+            Active:  isActive ? "bg-green-600 text-white border-green-600"     : "bg-green-50 border-green-300 text-green-800 hover:bg-green-100",
+            Expired: isActive ? "bg-red-600 text-white border-red-600"         : "bg-red-50 border-red-300 text-red-800 hover:bg-red-100",
+            Pending: isActive ? "bg-yellow-500 text-white border-yellow-500"   : "bg-yellow-50 border-yellow-300 text-yellow-800 hover:bg-yellow-100",
+          };
+          return (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-4 py-2 rounded-sm text-[10px] cursor-pointer transition-colors border uppercase tracking-[0.08em] font-semibold ${colorMap[f]}`}
+            >
+              {f === "all" ? "All" : f}
+            </button>
+          );
+        })}
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}
-            className="text-[11px] text-txt-3 hover:text-permit-red2 bg-transparent border-none cursor-pointer transition-colors font-sans"
+            className="text-[11px] text-ink-400 hover:text-[#7A2C22] bg-transparent border-none cursor-pointer transition-colors font-sans"
           >
             × Clear filters
           </button>
         )}
         <button
           onClick={load}
-          className="ml-auto text-xs text-txt-3 hover:text-accent-2 transition-colors cursor-pointer bg-transparent border-none font-sans"
+          className="ml-auto text-xs text-ink-400 hover:text-amber-600 transition-colors cursor-pointer bg-transparent border-none font-sans"
         >
           ↻ Refresh
         </button>
@@ -360,8 +365,8 @@ export default function HistoryTable({ onNavigate, onToast }) {
 
       {/* Selection mode banner — visible whenever the user is picking permits */}
       {selectMode && (
-        <div className="flex items-center gap-3 px-[18px] py-2.5 bg-accent/10 border-b border-accent/30">
-          <span className="text-[12px] text-accent-2 font-medium">
+        <div className="flex items-center gap-3 px-[18px] py-2.5 bg-amber/10 border-b border-amber/30">
+          <span className="text-[12px] text-amber-600 font-medium">
             {selectedIds.size === 0
               ? "Tap permits below to select them for duplication"
               : `${selectedIds.size} selected`}
@@ -370,13 +375,13 @@ export default function HistoryTable({ onNavigate, onToast }) {
             <>
               <button
                 onClick={duplicateSelectedToCart}
-                className="bg-accent text-white border-none px-3 py-[5px] rounded-md text-[11px] font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans"
+                className="bg-amber text-white border-none px-3 py-[5px] rounded-sm text-[11px] font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans"
               >
                 ⧉ Add to Cart & Order
               </button>
               <button
                 onClick={clearSelection}
-                className="text-[11px] text-txt-3 hover:text-txt-1 bg-transparent border-none cursor-pointer transition-colors font-sans"
+                className="text-[11px] text-ink-400 hover:text-steel-900 bg-transparent border-none cursor-pointer transition-colors font-sans"
               >
                 Clear selection
               </button>
@@ -384,7 +389,7 @@ export default function HistoryTable({ onNavigate, onToast }) {
           )}
           <button
             onClick={exitSelectMode}
-            className="ml-auto text-[11px] text-txt-3 hover:text-txt-1 bg-transparent border-none cursor-pointer transition-colors font-sans"
+            className="ml-auto text-[11px] text-ink-400 hover:text-steel-900 bg-transparent border-none cursor-pointer transition-colors font-sans"
           >
             Exit
           </button>
@@ -392,36 +397,36 @@ export default function HistoryTable({ onNavigate, onToast }) {
       )}
 
       {loading ? (
-        <div className="p-10 text-center text-txt-3 text-[13px]">Loading...</div>
+        <div className="p-10 text-center text-ink-400 text-[13px]">Loading...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-10 text-txt-3 text-[13px]">
+        <div className="text-center py-10 text-ink-400 text-[13px]">
           <div className="text-[32px] mb-2.5">📋</div>
           No permits match this filter.
         </div>
       ) : (
         <table className="w-full border-collapse">
           <thead>
-            <tr className="text-[11px] text-txt-3 font-medium uppercase tracking-wide bg-navy-3">
+            <tr className="text-[11px] text-ink-400 font-medium uppercase tracking-wide bg-stone-100">
               {selectMode && (
-                <th className="py-2.5 px-3 border-b border-subtle w-[36px] text-center">
+                <th className="py-2.5 px-3 border-b border-ink/15 w-[36px] text-center">
                   <input
                     type="checkbox"
                     checked={filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id))}
                     onChange={toggleSelectAllVisible}
-                    className="!w-auto !m-0 cursor-pointer accent-accent"
+                    className="!w-auto !m-0 cursor-pointer accent-amber"
                     title="Select all visible"
                   />
                 </th>
               )}
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[80px]">Permit #</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle">Driver</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[90px]">Tractor</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[60px]">State</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[140px]">Type</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[110px]">Effective</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[110px]">Expires</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[90px]">Status</th>
-              <th className="py-2.5 px-3.5 border-b border-subtle w-[70px]"></th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[80px]">Permit #</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15">Driver</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[90px]">Tractor</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[60px]">State</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[140px]">Type</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[110px]">Effective</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[110px]">Expires</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[90px]">Status</th>
+              <th className="py-2.5 px-3.5 border-b border-ink/15 w-[70px]"></th>
             </tr>
           </thead>
           <tbody>
@@ -434,46 +439,46 @@ export default function HistoryTable({ onNavigate, onToast }) {
                   onClick={selectMode ? () => toggleSelect(p.id) : undefined}
                   className={`transition-colors ${
                     selectMode
-                      ? `cursor-pointer ${checked ? "bg-accent/10" : "hover:bg-navy-3"}`
-                      : "hover:bg-navy-3"
+                      ? `cursor-pointer ${checked ? "bg-amber/10" : "hover:bg-stone-100"}`
+                      : "hover:bg-stone-100"
                   }`}
                 >
                   {selectMode && (
-                    <td className="py-2.5 px-3 border-b border-subtle text-center">
+                    <td className="py-2.5 px-3 border-b border-ink/15 text-center">
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleSelect(p.id)}
                         onClick={(e) => e.stopPropagation()}
-                        className="!w-auto !m-0 cursor-pointer accent-accent"
+                        className="!w-auto !m-0 cursor-pointer accent-amber"
                       />
                     </td>
                   )}
-                  <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-xs text-txt-3">{p.id}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 font-mono text-xs text-ink-400">{p.id}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15">
                     <div className="flex items-center gap-[7px]">
-                      <div className="w-6 h-6 rounded-full bg-steel flex items-center justify-center text-[9px] font-semibold text-accent-2 flex-shrink-0">
+                      <div className="w-6 h-6 rounded-full bg-stone-100 border border-ink/15 flex items-center justify-center text-[9px] font-semibold text-amber-600 flex-shrink-0">
                         {initials}
                       </div>
                       <span className="text-[13px]">{p.driverName || "—"}</span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-[12px] text-txt-2">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 font-mono text-[12px] text-ink-500">
                     {p.tractor || "—"}
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle">
-                    <span className="text-[11px] font-bold text-accent px-1.5 py-0.5 bg-accent/10 rounded">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15">
+                    <span className="text-[11px] font-bold text-amber-600 px-2 py-1 bg-amber/10 border border-amber/30 rounded-sm">
                       {p.state || "—"}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle text-[12.5px] text-txt-1">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 text-[12.5px] text-steel-900">
                     {formatPermitType(p.type)}
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle text-[13px] text-txt-2">{p.effDate || "—"}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle text-[13px] text-txt-2">{p.expDate || "—"}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle"><Badge type={p.status} /></td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle">
-                    <button className="bg-navy-3 border border-subtle text-txt-2 rounded-md px-2.5 py-1 text-[11px] cursor-pointer hover:bg-navy-4 hover:text-accent-2 hover:border-accent transition-all inline-flex items-center gap-1 font-sans">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 text-[13px] text-ink-500">{p.effDate || "—"}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 text-[13px] text-ink-500">{p.expDate || "—"}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15"><Badge type={p.status} /></td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15">
+                    <button className="bg-stone-100 border border-ink/15 text-ink-500 rounded-sm px-2.5 py-1 text-[11px] cursor-pointer hover:bg-bone-200 hover:text-amber-600 hover:border-amber/40 transition-all inline-flex items-center gap-1 font-sans">
                       ↓ PDF
                     </button>
                   </td>

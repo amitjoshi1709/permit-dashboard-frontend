@@ -97,59 +97,88 @@ export default function SettingsView({ onToast }) {
 
   return (
     <div className="max-w-[720px]">
-      <div className="bg-navy-2 border border-subtle rounded-[14px] mb-5">
-        <div className="px-[18px] py-3.5 border-b border-subtle flex items-center justify-between">
+      <div className="bg-white border border-ink/15 mb-5">
+        <div className="px-[18px] py-3.5 border-b border-ink/15 flex items-center justify-between">
           <div className="text-[13.5px] font-semibold">Payment Card</div>
-          <span className="text-[10px] text-txt-3 uppercase tracking-wide">
+          <span className="text-[10px] text-ink-400 uppercase tracking-wide">
             Encrypted server-side
           </span>
         </div>
         <div className="p-5">
           {loading ? (
-            <div className="text-[12px] text-txt-3 py-4 text-center">Loading...</div>
+            <div className="text-[12px] text-ink-400 py-4 text-center">Loading...</div>
           ) : (
             <>
               {/* Card preview */}
-              <div className="mb-5">
-                <div className="bg-gradient-to-br from-navy-3 to-navy-4 border border-subtle2 rounded-[12px] px-5 py-4 flex items-center gap-4">
-                  <span className="bg-accent rounded-[5px] text-[10px] font-bold text-white px-1.5 py-0.5 tracking-wide">
-                    {brand}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-mono text-[14px] text-txt-1 tracking-wider">
-                      {card ? `•••• •••• •••• ${card.lastFour}` : "No card on file"}
+              <div className="mb-6">
+                {card ? (
+                  <div className="relative bg-white border border-ink/15 rounded-sm px-6 py-5 overflow-hidden shadow-card">
+                    {/* Amber accent stripe */}
+                    <div className="absolute top-0 left-0 h-full w-1 bg-amber" />
+                    <div className="flex items-start justify-between mb-8">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-[0.22em] font-semibold text-amber-600 mb-1">
+                          On File
+                        </div>
+                        <div className="text-[11px] text-ink-500 font-medium">
+                          Payment Card
+                        </div>
+                      </div>
+                      <span className="bg-amber rounded-sm text-[10px] font-bold text-white px-2 py-1 tracking-wide uppercase">
+                        {brand}
+                      </span>
                     </div>
-                    <div className="text-[11px] text-txt-3 mt-0.5 truncate">
-                      {card?.cardholderName || "—"}
+                    <div className="font-mono text-[20px] tracking-[0.15em] text-steel-900 font-semibold mb-5">
+                      •••• •••• •••• <span className="text-amber-600">{card.lastFour}</span>
                     </div>
-                  </div>
-                  {card && (
-                    <div className="text-right">
-                      <div className="text-[11px] text-txt-3">{expDisplay}</div>
-                      <div className="text-[10px] text-txt-3">
+                    <div className="flex items-end justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[9px] uppercase tracking-[0.15em] text-ink-400 font-semibold mb-1">
+                          Cardholder
+                        </div>
+                        <div className="text-[13px] text-steel-900 font-semibold truncate">
+                          {card.cardholderName || "—"}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-[9px] uppercase tracking-[0.15em] text-ink-400 font-semibold mb-1">
+                          Expires
+                        </div>
+                        <div className="text-[13px] text-steel-900 font-semibold tabular-nums">
+                          {expDisplay}
+                        </div>
+                      </div>
+                    </div>
+                    {(card.billingCity || card.billingState || card.billingZip) && (
+                      <div className="mt-4 pt-4 border-t border-ink/10 text-[11px] text-ink-500">
                         {card.billingCity || "—"}
                         {card.billingState ? `, ${card.billingState}` : ""} {card.billingZip}
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white border-2 border-dashed border-ink/20 rounded-sm px-6 py-10 text-center">
+                    <div className="text-[13px] text-ink-500 font-medium mb-1">No card on file</div>
+                    <div className="text-[11px] text-ink-400">Add a card to enable automated payments.</div>
+                  </div>
+                )}
               </div>
 
               {!editing ? (
                 <button
                   onClick={startEdit}
-                  className="bg-transparent border border-subtle2 text-txt-2 rounded-md px-3.5 py-[7px] text-xs cursor-pointer hover:bg-navy-3 hover:text-txt-1 transition-all font-sans"
+                  className="bg-transparent border border-ink/20 text-ink-500 rounded-sm px-3.5 py-[7px] text-xs cursor-pointer hover:bg-bone-3 hover:text-steel-900 transition-all font-sans"
                 >
                   {card ? "Update Card Info" : "Add Card"}
                 </button>
               ) : (
                 <div className="space-y-3.5">
-                  <div className="text-[10px] text-[#FFD166] mb-1">
+                  <div className="text-[10px] text-amber-600 mb-1">
                     Card number and CVV must be re-entered each time for security.
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                    <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                       Cardholder Name
                     </label>
                     <input
@@ -161,7 +190,7 @@ export default function SettingsView({ onToast }) {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                    <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                       Card Number
                     </label>
                     <input
@@ -177,7 +206,7 @@ export default function SettingsView({ onToast }) {
 
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         Exp Month
                       </label>
                       <input
@@ -192,7 +221,7 @@ export default function SettingsView({ onToast }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         Exp Year
                       </label>
                       <input
@@ -207,7 +236,7 @@ export default function SettingsView({ onToast }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         CVV
                       </label>
                       <input
@@ -224,14 +253,14 @@ export default function SettingsView({ onToast }) {
                     </div>
                   </div>
 
-                  <hr className="border-t border-subtle" />
+                  <hr className="border-t border-ink/15" />
 
-                  <div className="text-[11px] uppercase tracking-wide text-txt-3 font-medium">
+                  <div className="text-[11px] uppercase tracking-wide text-ink-400 font-medium">
                     Billing Address
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                    <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                       Street
                     </label>
                     <input
@@ -243,7 +272,7 @@ export default function SettingsView({ onToast }) {
 
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         City
                       </label>
                       <input
@@ -253,7 +282,7 @@ export default function SettingsView({ onToast }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         State
                       </label>
                       <input
@@ -266,7 +295,7 @@ export default function SettingsView({ onToast }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                         Zip
                       </label>
                       <input
@@ -284,14 +313,14 @@ export default function SettingsView({ onToast }) {
                     <button
                       onClick={saveCard}
                       disabled={saving}
-                      className="bg-accent text-white border-none px-3.5 py-[7px] rounded-lg text-xs font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="bg-amber text-white border-none px-3.5 py-[7px] rounded-sm text-xs font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {saving ? "Saving..." : "Save Card"}
                     </button>
                     <button
                       onClick={cancelEdit}
                       disabled={saving}
-                      className="bg-transparent border border-subtle2 text-txt-2 rounded-md px-3.5 py-[7px] text-xs cursor-pointer hover:bg-navy-3 hover:text-txt-1 transition-all font-sans"
+                      className="bg-transparent border border-ink/20 text-ink-500 rounded-sm px-3.5 py-[7px] text-xs cursor-pointer hover:bg-bone-3 hover:text-steel-900 transition-all font-sans"
                     >
                       Cancel
                     </button>
@@ -303,20 +332,20 @@ export default function SettingsView({ onToast }) {
         </div>
       </div>
 
-      <div className="bg-navy-2 border border-subtle rounded-[14px]">
-        <div className="px-[18px] py-3.5 border-b border-subtle">
+      <div className="bg-white border border-ink/15">
+        <div className="px-[18px] py-3.5 border-b border-ink/15">
           <div className="text-[13.5px] font-semibold">Receipt Delivery</div>
         </div>
         <div className="p-5">
           <div className="grid grid-cols-2 gap-3.5 mb-3">
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Email
               </label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Phone (RingCentral)
               </label>
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -324,25 +353,25 @@ export default function SettingsView({ onToast }) {
           </div>
           <button
             onClick={() => onToast?.("✓", "Settings saved")}
-            className="bg-accent text-white border-none px-3.5 py-[7px] rounded-lg text-xs font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans"
+            className="bg-amber text-white border-none px-3.5 py-[7px] rounded-sm text-xs font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans"
           >
             Save Settings
           </button>
 
-          <hr className="border-t border-subtle my-[18px]" />
+          <hr className="border-t border-ink/15 my-[18px]" />
 
-          <div className="text-[11px] uppercase tracking-wide text-txt-3 font-medium mb-3">
+          <div className="text-[11px] uppercase tracking-wide text-ink-400 font-medium mb-3">
             Georgia Portal Account
           </div>
           <div className="grid grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Account No.
               </label>
               <input type="text" value="82761" readOnly className="!opacity-60 !cursor-not-allowed" />
             </div>
             <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">
                 Billing Address
               </label>
               <input
