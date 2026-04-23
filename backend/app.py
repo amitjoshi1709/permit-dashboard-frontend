@@ -25,6 +25,7 @@ from database import (
     insert_permits,
     update_permit_status,
     get_permit_history,
+    get_blanket_permits,
     get_mega_insurance,
     update_mega_insurance,
     get_payment_card,
@@ -279,5 +280,4 @@ def get_form_fields(states: str, permitType: str, _: str = Depends(require_auth)
 
 @app.get("/api/permits/blankets")
 def blanket_permits(_: str = Depends(require_auth)):
-    # TODO: Query blanket_permits table from Supabase
-    return []
+    return get_blanket_permits()

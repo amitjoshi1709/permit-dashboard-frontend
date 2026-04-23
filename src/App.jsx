@@ -37,7 +37,7 @@ export default function App() {
       case "history":
         return <HistoryTable onNavigate={setActiveView} onToast={showToast} />;
       case "blankets":
-        return <BlanketPermits onToast={showToast} />;
+        return <BlanketPermits onToast={showToast} onNavigate={setActiveView} />;
       case "drivers":
         return <DriversView onToast={showToast} />;
       case "settings":

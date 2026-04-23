@@ -14,15 +14,17 @@ export default function Sidebar({ activeView, onNavigate }) {
   let lastSection = "";
 
   return (
-    <aside className="w-[240px] min-h-screen bg-steel-900 text-bone fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r border-black/20">
+    <aside className="w-[240px] min-h-screen bg-steel-900 text-bone fixed top-0 left-0 bottom-0 z-50 flex flex-col">
       {/* Logo */}
-      <div className="px-6 pt-6 pb-5 border-b border-white/10">
+      <div className="px-6 bg-bone flex items-center h-[80px]">
         <div className="flex items-center gap-3">
-          <img src={logo} alt="PermitFlo" className="w-24 h-24 object-contain rounded-sm bg-white/10 p-1.5" />
+          <img src={logo} alt="PermitFlo" className="w-16 h-16 object-contain" />
           <div>
-            <div className="font-serif font-black text-[17px] leading-none text-bone">PermitFlo</div>
-            <div className="text-[9px] text-amber-400 font-semibold uppercase tracking-[0.22em] mt-1.5">
-              Est. 2025
+            <div className="font-serif font-black text-[17px] leading-none">
+              <span className="text-steel-900">Permit</span><span className="text-amber">Flo</span>
+            </div>
+            <div className="text-[9px] text-ink-400 font-semibold uppercase tracking-[0.22em] mt-1.5">
+              Enterprise
             </div>
           </div>
         </div>

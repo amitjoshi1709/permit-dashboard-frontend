@@ -265,6 +265,67 @@ def get_permit_history() -> list[dict]:
     ]
 
 
+def get_blanket_permits() -> list[dict]:
+    """Fetch all blanket permits (fl_blanket_*) ordered by most recent first."""
+    result = (
+        supabase.table("permits")
+        .select("*")
+        .like("permit_type", "fl_blanket_%")
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    blankets = []
+    for p in result.data:
+        eff = p.get("eff_date", "")
+        # Compute expiration: 1 year from effective date
+        exp = ""
+        if eff:
+            try:
+                if "-" in eff:
+                    parts = eff.split("-")
+                    y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+                elif "/" in eff:
+                    parts = eff.split("/")
+                    m, d, y = int(parts[0]), int(parts[1]), int(parts[2])
+                else:
+                    y, m, d = 0, 0, 0
+                if y:
+                    exp = f"{m:02d}/{d:02d}/{y + 1}"
+            except Exception:
+                pass
+
+        # Determine status based on expiration
+        status = "Active"
+        if exp:
+            try:
+                parts = exp.split("/")
+                exp_m, exp_d, exp_y = int(parts[0]), int(parts[1]), int(parts[2])
+                from datetime import date
+                exp_date = date(exp_y, exp_m, exp_d)
+                if exp_date < date.today():
+                    status = "Expired"
+                elif (exp_date - date.today()).days < 30:
+                    status = "Expiring Soon"
+            except Exception:
+                pass
+
+        blankets.append({
+            "id": p["id"],
+            "driverId": p.get("driver_id"),
+            "driverName": p.get("driver_name", ""),
+            "tractor": p.get("tractor", ""),
+            "state": p.get("state", ""),
+            "type": p.get("type") or p.get("permit_type", ""),
+            "status": status,
+            "effDate": eff,
+            "expDate": exp,
+            "fee": p.get("fee", 0),
+            "extraFields": p.get("extra_fields"),
+        })
+    return blankets
+
+
 # ── Payment card (encrypted) ───────────────────────────────────────
 
 def _detect_brand(card_number: str) -> str:

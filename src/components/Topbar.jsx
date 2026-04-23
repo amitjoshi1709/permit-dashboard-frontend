@@ -10,7 +10,7 @@ const VIEW_TITLES = {
 export default function Topbar({ activeView, onNewPermit }) {
   const title = VIEW_TITLES[activeView] || VIEW_TITLES.dashboard;
   return (
-    <div className="bg-bone border-b border-ink/15 px-8 lg:px-12 py-5 flex items-center gap-6 sticky top-0 z-40">
+    <div className="bg-bone border-b border-ink/15 px-8 lg:px-12 h-[80px] flex items-center gap-6 sticky top-0 z-40">
       <h1 className="font-serif font-black text-2xl tracking-tight text-steel-900 leading-none">
         {title}
       </h1>

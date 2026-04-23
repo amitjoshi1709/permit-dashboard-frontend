@@ -205,7 +205,7 @@ export default function HistoryTable({ onNavigate, onToast }) {
         {!selectMode ? (
           <button
             onClick={enterSelectMode}
-            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-sm text-[11px] font-medium cursor-pointer bg-stone-100 border border-ink/20 text-ink-500 hover:bg-amber/10 hover:border-amber/40 hover:text-amber-600 transition-all font-sans"
+            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-[12px] font-medium cursor-pointer bg-transparent border-2 border-amber text-ink-500 hover:text-amber-600 transition-all font-sans"
           >
             ⧉ Duplicate permits
           </button>
@@ -311,14 +311,14 @@ export default function HistoryTable({ onNavigate, onToast }) {
                 onClick={() => applyCombo(combo)}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-[5px] rounded-full text-[11px] cursor-pointer transition-all border font-sans ${
                   active
-                    ? "bg-amber/20 border-amber/50 text-amber-600 font-medium"
-                    : "bg-stone-100 border-ink/15 text-ink-500 hover:bg-bone-200 hover:text-steel-900"
+                    ? "bg-transparent border-amber/60 text-amber-600 font-medium"
+                    : "bg-transparent border-ink/15 text-ink-400 hover:border-ink/30 hover:text-ink-500"
                 }`}
                 title={`${combo.state} · ${formatPermitType(combo.type)} — ${combo.count} permits`}
               >
                 <span className="font-bold">{combo.state}</span>
                 <span className="opacity-80">{formatPermitType(combo.type)}</span>
-                <span className={`text-[9px] rounded px-1 ${active ? "bg-amber/25 text-amber-600" : "bg-bone-200 text-ink-400"}`}>
+                <span className={`text-[9px] rounded px-1 ${active ? "bg-amber/15 text-amber-600" : "bg-ink/5 text-ink-400"}`}>
                   {combo.count}
                 </span>
               </button>
@@ -406,7 +406,7 @@ export default function HistoryTable({ onNavigate, onToast }) {
       ) : (
         <table className="w-full border-collapse">
           <thead>
-            <tr className="text-[11px] text-ink-400 font-medium uppercase tracking-wide bg-stone-100">
+            <tr className="text-[11px] text-ink-400 font-medium uppercase tracking-wide bg-amber/[0.12]">
               {selectMode && (
                 <th className="py-2.5 px-3 border-b border-ink/15 w-[36px] text-center">
                   <input
@@ -418,7 +418,7 @@ export default function HistoryTable({ onNavigate, onToast }) {
                   />
                 </th>
               )}
-              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[80px]">Permit #</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[80px] whitespace-nowrap">Permit #</th>
               <th className="text-left py-2.5 px-3.5 border-b border-ink/15">Driver</th>
               <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[90px]">Tractor</th>
               <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[60px]">State</th>
