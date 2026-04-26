@@ -664,9 +664,9 @@ def step_click_pay(page: Page):
     print("[OK] Pay clicked")
 
 
+
 def step_click_proceed(page: Page):
     """Click the Proceed button."""
-    print("\n[PAYMENT 3] Clicking Proceed...")
 
     for sel in [
         'input[value="Proceed"]', 'button:has-text("Proceed")',
@@ -688,8 +688,30 @@ def step_click_proceed(page: Page):
 
 
 def step_click_pay_now(page: Page):
-    """Click Pay Now — this triggers a popup window for card entry."""
-    print("\n[PAYMENT 4] Clicking Pay Now...")
+    """Fix delivery email, then click Pay Now — triggers a popup for card entry."""
+    print("\n[PAYMENT 4] Fixing delivery email + Clicking Pay Now...")
+
+    # Fix the Electronic Delivery email on this page before clicking Pay Now
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(2)
+
+    new_email = "MICHAEL@MEGATRUCKINGLLC.COM"
+    inputs = page.locator('input').all()
+    for inp in inputs:
+        try:
+            if not inp.is_visible():
+                continue
+            val = inp.input_value().strip()
+            if "@" in val and "megatrucking" in val.lower() and "michael" not in val.lower():
+                inp.click(click_count=3)
+                inp.fill(new_email)
+                print(f'  [FILL] Delivery email: "{val}" → "{new_email}"')
+                break
+        except Exception:
+            continue
+
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    time.sleep(1)
 
     for sel in [
         'input[value="Pay Now"]', 'button:has-text("Pay Now")',
@@ -928,11 +950,11 @@ def step_fill_card_popup(page: Page, payment_card: dict):
 
     _fill_payment_field(popup_page, [
         '#email-84', 'input[name="email"]', 'input[autocomplete="email"]',
-    ], "paceywells03134@gmail.com", "Email")
+    ], "michael@megatruckingllc.com", "Email")
 
     _fill_payment_field(popup_page, [
         '#phone-number-84', 'input[name="phone"]', 'input[autocomplete="tel"]',
-    ], "9543998833", "Phone")
+    ], "7869304305", "Phone")
 
     # Submit payment form on popup page
     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")

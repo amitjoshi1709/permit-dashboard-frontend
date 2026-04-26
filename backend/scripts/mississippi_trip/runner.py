@@ -30,8 +30,8 @@ TIMEOUT = 30_000
 
 CONTACT = {
     "name":             "Michael Caballero",
-    "phone":            "786-332-5691",
-    "email":            "INFO@MEGATRUCKINGLLC.COM",
+    "phone":            "786-930-4305",
+    "email":            "Michael@MegaTruckingllc.com",
     "delivery_method":  "Email",
     "company_ref":      "MEGA TRUCKING LLC",
 }

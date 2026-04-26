@@ -595,14 +595,14 @@ def step_page3_vehicle_details(page: Page, data: dict) -> None:
 
 CHECKOUT_CUSTOMER = {
     "country":    "United States",
-    "first_name": "Erick",
-    "last_name":  "Rodriguez",
+    "first_name": "Michael",
+    "last_name":  "Caballero",
     "address":    "5979 NW 151 ST Suite 101",
     "city":       "Miami Lakes",
     "state":      "FL - Florida",
     "zip":        "33014",
-    "phone":      "786-332-5691",
-    "email":      "info@megatruckingllc.com",
+    "phone":      "786-930-4305",
+    "email":      "Michael@MegaTruckingllc.com",
 }
 
 

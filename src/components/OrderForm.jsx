@@ -42,6 +42,9 @@ export default function OrderForm({ onToast }) {
 
   // ── Queue ──
   const [queue, setQueue] = useState([]);
+  const [editingCartId, setEditingCartId] = useState(null);
+  const [editCartFields, setEditCartFields] = useState([]);
+  const [editCartValues, setEditCartValues] = useState({});
   // Snapshot of the most recently submitted batch — lets you re-queue the same
   // set of permits with one click if a run fails (no need to re-enter data).
   const [lastBatch, setLastBatch] = useState([]);
@@ -419,6 +422,39 @@ export default function OrderForm({ onToast }) {
       };
       return [...prev, clone];
     });
+  }
+
+  // ── Edit cart entry extraFields ──
+  async function startEditCartEntry(entry) {
+    if (editingCartId === entry.id) {
+      setEditingCartId(null);
+      return;
+    }
+    // Fetch the form field schema for this entry's state + permit type
+    try {
+      const fields = await fetchFormFields([entry.state], entry.permitType);
+      setEditCartFields(fields);
+      setEditCartValues(entry.extraFields ? { ...entry.extraFields } : {});
+      setEditingCartId(entry.id);
+    } catch {
+      onToast?.("⚠", "Could not load form fields");
+    }
+  }
+
+  function handleEditCartFieldChange(key, value) {
+    setEditCartValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function saveCartEdit(entryId) {
+    setQueue((prev) =>
+      prev.map((e) =>
+        e.id === entryId
+          ? { ...e, extraFields: { ...editCartValues } }
+          : e
+      )
+    );
+    setEditingCartId(null);
+    onToast?.("✓", "Cart entry updated");
   }
 
   // ── Submit entire queue ──
@@ -1032,43 +1068,80 @@ export default function OrderForm({ onToast }) {
                   {queue.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-sm bg-stone-100 border border-ink/15 group"
+                      className="px-3 py-2.5 rounded-sm bg-stone-100 border border-ink/15 group"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold text-amber-600">{entry.state}</span>
-                          <span className="text-[11px] text-ink-500 font-medium">{entry.permitTypeLabel}</span>
-                          <span className="text-[10px] text-ink-400">
-                            {entry.effectiveDate}{entry.effectiveTime ? ` · ${entry.effectiveTime}` : ""}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-ink-400 truncate">
-                          {entry.driverNames.join(", ")}
-                        </div>
-                        {entry.extraFields && (
-                          <div className="text-[10px] text-ink-400 opacity-60 mt-0.5">
-                            + extra fields attached
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[11px] font-bold text-amber-600">{entry.state}</span>
+                            <span className="text-[11px] text-ink-500 font-medium">{entry.permitTypeLabel}</span>
+                            <span className="text-[10px] text-ink-400">
+                              {entry.effectiveDate}{entry.effectiveTime ? ` · ${entry.effectiveTime}` : ""}
+                            </span>
                           </div>
-                        )}
+                          <div className="text-[11px] text-ink-400 truncate">
+                            {entry.driverNames.join(", ")}
+                          </div>
+                          {entry.extraFields && !editingCartId && (
+                            <div className="text-[10px] text-ink-400 opacity-60 mt-0.5">
+                              + extra fields attached
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {entry.extraFields && (
+                            <button
+                              onClick={() => startEditCartEntry(entry)}
+                              disabled={busy}
+                              title="Edit dimensions & fields"
+                              className="text-ink-400 hover:text-amber-600 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              {editingCartId === entry.id ? "▾" : "✎"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => duplicateQueueEntry(entry.id)}
+                            disabled={busy}
+                            title="Duplicate this entry"
+                            className="text-ink-400 hover:text-amber-600 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            ⧉
+                          </button>
+                          <button
+                            onClick={() => removeFromQueue(entry.id)}
+                            disabled={busy}
+                            title="Remove from queue"
+                            className="text-ink-400 hover:text-red-400 text-sm bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            x
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => duplicateQueueEntry(entry.id)}
-                          disabled={busy}
-                          title="Duplicate this entry"
-                          className="text-ink-400 hover:text-amber-600 text-[11px] bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          ⧉
-                        </button>
-                        <button
-                          onClick={() => removeFromQueue(entry.id)}
-                          disabled={busy}
-                          title="Remove from queue"
-                          className="text-ink-400 hover:text-red-400 text-sm bg-transparent border-none cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          x
-                        </button>
-                      </div>
+                      {editingCartId === entry.id && editCartFields.length > 0 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-ink/10">
+                          <DynamicFields
+                            fields={editCartFields}
+                            values={editCartValues}
+                            onChange={handleEditCartFieldChange}
+                            disabled={busy}
+                          />
+                          <div className="flex gap-2 mt-2.5">
+                            <button
+                              onClick={() => saveCartEdit(entry.id)}
+                              disabled={busy}
+                              className="bg-amber text-white border-none px-3 py-1.5 rounded-sm text-[11px] font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans"
+                            >
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={() => setEditingCartId(null)}
+                              className="bg-transparent border border-ink/20 text-ink-500 px-3 py-1.5 rounded-sm text-[11px] cursor-pointer hover:bg-bone-3 transition-all font-sans"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
