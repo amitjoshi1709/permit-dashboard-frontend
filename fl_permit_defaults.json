@@ -1,0 +1,80 @@
+{
+  "os_ow": {
+    "width":           { "ft": "10",  "in": "9" },
+    "height":          { "ft": "9", "in": "0" },
+    "length":          { "ft": "60", "in": "0" },
+    "trailerLength":   { "ft": "48", "in": "0" },
+    "kingpinDistance": { "ft": "30", "in": "0" },
+    "frontOverhang":   { "ft": "0",  "in": "0" },
+    "rearOverhang":    { "ft": "0",  "in": "0" },
+    "vehicleConfig":   "Truck Tractor Semitrailer Hauling",
+    "axleCount":       "5",
+    "axleWeights":     ["12000", "17000", "17000", "17000", "17000"],
+    "axleSpacings": [
+      { "ft": "15", "in": "0" },
+      { "ft": "4",  "in": "0" },
+      { "ft": "24", "in": "0" },
+      { "ft": "5",  "in": "0" }
+    ],
+    "divisibleLoad": "No"
+  },
+  "fl_blanket_inner_bridge": {
+    "width":           { "ft": "8",  "in": "6" },
+    "height":          { "ft": "13", "in": "6" },
+    "length":          { "ft": "80", "in": "0" },
+    "trailerLength":   { "ft": "26", "in": "0" },
+    "kingpinDistance": { "ft": "14", "in": "0" },
+    "frontOverhang":   { "ft": "7",  "in": "0" },
+    "rearOverhang":    { "ft": "7",  "in": "0" },
+    "axleCount":       "6",
+    "axleWeights":     ["12500", "13500", "13500", "13500", "13500", "13500"],
+    "axleSpacings": [
+      { "ft": "12", "in": "0" },
+      { "ft": "5",  "in": "0" },
+      { "ft": "37", "in": "0" },
+      { "ft": "5",  "in": "0" },
+      { "ft": "5",  "in": "0" }
+    ]
+  },
+  "fl_blanket_flatbed": {
+    "width":                 { "ft": "14",  "in": "0" },
+    "height":                { "ft": "18", "in": "0" },
+    "length":                { "ft": "120", "in": "0" },
+    "trailerLength":         { "ft": "80", "in": "0" },
+    "kingpinDistance":       { "ft": "41", "in": "0" },
+    "frontOverhang":         { "ft": "0",  "in": "0" },
+    "rearOverhang":          { "ft": "0",  "in": "0" },
+    "vehicleConfig":         "Truck Tractor Semitrailer Hauling",
+    "axleCount":             "5",
+    "axleWeights":           ["16000", "24000", "24000", "24000", "24000"],
+    "axleSpacings": [
+      { "ft": "15", "in": "0" },
+      { "ft": "4",  "in": "6" },
+      { "ft": "36", "in": "0" },
+      { "ft": "4",  "in": "6" }
+    ],
+    "divisibleLoad":         "No",
+    "loadDescriptionChoice": "construction"
+  },
+  "fl_blanket_bulk": {
+    "width":                 { "ft": "8",  "in": "6" },
+    "height":                { "ft": "13", "in": "6" },
+    "length":                { "ft": "80", "in": "0" },
+    "trailerLength":         { "ft": "26", "in": "0" },
+    "kingpinDistance":       { "ft": "14", "in": "0" },
+    "frontOverhang":         { "ft": "7",  "in": "0" },
+    "rearOverhang":          { "ft": "7",  "in": "0" },
+    "vehicleConfig":         "Truck Tractor Semitrailer Hauling",
+    "axleCount":             "6",
+    "axleWeights":           ["12000", "15200", "15200", "15200", "15200", "15200"],
+    "axleSpacings": [
+      { "ft": "12", "in": "0" },
+      { "ft": "5",  "in": "0" },
+      { "ft": "37", "in": "0" },
+      { "ft": "5",  "in": "0" },
+      { "ft": "5",  "in": "0" }
+    ],
+    "divisibleLoad":         "Yes",
+    "loadDescriptionChoice": "none_of_the_above"
+  }
+}

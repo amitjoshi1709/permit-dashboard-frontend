@@ -13,7 +13,7 @@ import os
 import redis
 from celery_app import celery
 from dotenv import load_dotenv
-from database import update_permit_status
+from database import update_permit_status, get_decrypted_payment_card
 
 load_dotenv()
 
@@ -24,11 +24,13 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 
 from config import COMPANY
 from scripts.alabama_tf.runner import run as run_alabama_tf
-from scripts.alabama_osow.runner import run as run_alabama_osow
-from scripts.georgia_tf.runner import run as run_georgia_tf
+from scripts.alabama_annual_osow.runner import run as run_alabama_annual_osow
+from scripts.georgia_tf.runner import run as run_georgia_tf, run_batch as run_georgia_tf_batch
 from scripts.georgia_osow.runner import run as run_georgia_osow
 from scripts.arkansas_trip.runner import run as run_arkansas_trip
 from scripts.florida_trip.runner import run as run_florida_trip
+from scripts.mississippi_trip.runner import run as run_mississippi_trip
+from scripts.south_carolina_trip.runner import run as run_south_carolina_trip
 
 # Registry key: (state, permitType) for state+type-specific runners.
 # Fallback: (state, None) matches any permit type for that state.
@@ -36,19 +38,27 @@ SCRIPT_REGISTRY = {
     ("AL", "trip_fuel"): run_alabama_tf,
     ("AL", "trip"):      run_alabama_tf,
     ("AL", "fuel"):      run_alabama_tf,
-    ("AL", "os_ow"):     run_alabama_osow,
+    ("AL", "os_ow"):          run_alabama_annual_osow,
+    ("AL", "al_annual_osow"): run_alabama_annual_osow,
     ("GA", "trip_fuel"):  run_georgia_tf,
     ("GA", "trip"):       run_georgia_tf,
     ("GA", "fuel"):       run_georgia_tf,
     ("GA", "os_ow"):      run_georgia_osow,
     ("AR", None):         run_arkansas_trip,
+    # FL: OS/OW reuses the old trip-script path (still clicks "Trip" at the top of
+    # the portal). The trip/fuel/trip_fuel entries remain for back-compat so that
+    # already-submitted history rows can still be duplicated + re-run.
+    ("FL", "os_ow"):                   run_florida_trip,
     ("FL", "trip"):                    run_florida_trip,
     ("FL", "fuel"):                    run_florida_trip,
     ("FL", "trip_fuel"):               run_florida_trip,
     ("FL", "fl_blanket_bulk"):         run_florida_trip,
     ("FL", "fl_blanket_inner_bridge"): run_florida_trip,
     ("FL", "fl_blanket_flatbed"):      run_florida_trip,
-    # ...add new states here
+    ("MS", None):                      run_mississippi_trip,
+    ("SC", "trip"):                    run_south_carolina_trip,
+    ("SC", "fuel"):                    run_south_carolina_trip,
+    ("SC", "trip_fuel"):               run_south_carolina_trip,
 }
 
 
@@ -153,7 +163,40 @@ def run_permit_job(self, job_id: str, permits: list):
     results = []
     set_job_status(job_id, "processing", results)
 
-    for permit in permits:
+    payment_card = get_decrypted_payment_card()
+    if not payment_card:
+        print(f"[task:{job_id}] WARNING: No payment card configured in settings")
+
+    # Batch all GA trip/fuel permits together so they share one browser session
+    # and avoid the 45-minute cooldown between purchases.
+    ga_tf_permits = [p for p in permits if p["state"] == "GA" and p.get("permitType", "") in ("trip", "fuel", "trip_fuel")]
+    other_permits = [p for p in permits if p not in ga_tf_permits]
+
+    if ga_tf_permits:
+        print(f"[task:{job_id}] Batching {len(ga_tf_permits)} GA permit(s) into one session")
+        try:
+            batch_results = run_georgia_tf_batch(
+                ga_tf_permits, job_id,
+                on_captcha_needed=None, company=COMPANY, payment_card=payment_card,
+            )
+            for result in batch_results:
+                results.append(result)
+                db_status = "Active" if result["status"] == "success" else "failed"
+                update_permit_status(result["permitId"], db_status)
+        except Exception as e:
+            for p in ga_tf_permits:
+                results.append({
+                    "permitId": p["permitId"],
+                    "driverName": f"{p['driver']['firstName']} {p['driver']['lastName']}",
+                    "tractor": p["driver"]["tractor"],
+                    "permitType": p.get("permitType", ""),
+                    "status": "error",
+                    "message": str(e),
+                })
+                update_permit_status(p["permitId"], "failed")
+        set_job_status(job_id, "processing", results)
+
+    for permit in other_permits:
         state = permit["state"]
         permit_type = permit.get("permitType", "")
         runner = _get_runner(state, permit_type)
@@ -172,7 +215,7 @@ def run_permit_job(self, job_id: str, permits: list):
 
         try:
             captcha_cb = _make_captcha_callback(job_id, permit["permitId"], results)
-            result = runner(permit, job_id, on_captcha_needed=captcha_cb, company=COMPANY)
+            result = runner(permit, job_id, on_captcha_needed=captcha_cb, company=COMPANY, payment_card=payment_card)
             results.append(result)
 
             # Update Supabase: success → "Active" (reached payment page), error → "failed"

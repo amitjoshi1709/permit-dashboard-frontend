@@ -10,7 +10,6 @@ Credentials: GA_OSOW_USERNAME / GA_OSOW_PASSWORD from .env
 
 import os
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
@@ -26,49 +25,17 @@ TIMEOUT = 30_000
 
 
 # ---------------------------------------------------------------------------
-# Screenshot helpers
-# ---------------------------------------------------------------------------
-
-_screenshot_counter = 0
-_screenshot_dir = ""
-
-
-def _reset_screenshots(job_id: str):
-    global _screenshot_counter, _screenshot_dir
-    _screenshot_counter = 0
-    _screenshot_dir = str(Path(__file__).resolve().parent.parent.parent / "screenshots" / job_id)
-    os.makedirs(_screenshot_dir, exist_ok=True)
-
-
-def _screenshot(page: Page, name: str) -> str:
-    global _screenshot_counter
-    _screenshot_counter += 1
-    prefix = str(_screenshot_counter).zfill(2)
-    filepath = os.path.join(_screenshot_dir, f"{prefix}_{name}.png")
-    page.screenshot(path=filepath, full_page=True)
-    print(f"  [SCREENSHOT] {filepath}")
-    return filepath
-
-
-# ---------------------------------------------------------------------------
 # Error helper
 # ---------------------------------------------------------------------------
 
 class PermitError(Exception):
-    def __init__(self, message: str, screenshot_path: str = None):
-        super().__init__(message)
-        self.screenshot_path = screenshot_path
+    pass
 
 
 def _fatal(page: Page, message: str):
-    """Take error screenshot then raise PermitError."""
+    """Raise PermitError with message."""
     print(f"\n  [FATAL] {message}")
-    err_screenshot = None
-    try:
-        err_screenshot = _screenshot(page, "ERROR")
-    except Exception:
-        pass
-    raise PermitError(message, err_screenshot)
+    raise PermitError(message)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +46,6 @@ def _login(page: Page, username: str, password: str):
     """Navigate to portal and log in."""
     print("\n[ACT] Navigating to GA OS/OW portal...")
     page.goto(PORTAL_URL, wait_until="domcontentloaded")
-    _screenshot(page, "portal_loaded")
 
     # Fill username and password
     print("[ACT] Logging in...")
@@ -99,7 +65,6 @@ def _login(page: Page, username: str, password: str):
     except PlaywrightTimeoutError:
         _fatal(page, "Login button not found or page did not load after login")
 
-    _screenshot(page, "logged_in")
     print("[OK] Login successful")
 
 
@@ -115,7 +80,6 @@ def _accept_agreement(page: Page):
         print("  [SKIP] Agreement page not found — may already be accepted")
         return
 
-    _screenshot(page, "agreement_accepted")
     print("[OK] Agreement accepted")
 
 
@@ -129,7 +93,6 @@ def _click_new_permit(page: Page):
     except PlaywrightTimeoutError:
         _fatal(page, "'New Permit' button not found")
 
-    _screenshot(page, "new_permit_clicked")
     print("[OK] New Permit page loaded")
 
 
@@ -143,7 +106,6 @@ def _click_i_know_which_permit(page: Page):
     except PlaywrightTimeoutError:
         _fatal(page, "'I know which permit I need' button not found")
 
-    _screenshot(page, "permit_type_selected")
     print("[OK] Permit selection page loaded")
 
 
@@ -175,7 +137,6 @@ def _fill_contact_info(page: Page, company: dict):
     except Exception as e:
         print(f"  [WARN] Could not fill some contact fields: {e}")
 
-    _screenshot(page, "contact_info_filled")
     print("[STOP] =============================================")
     print("[STOP] Contact info page reached — stopping here.")
     print("[STOP] =============================================\n")
@@ -190,6 +151,7 @@ def run(
     job_id: str,
     on_captcha_needed: Optional[Callable] = None,
     company: dict = None,
+    payment_card: dict = None,
 ) -> dict:
     """
     Run the Georgia OS/OW permit automation for one driver.
@@ -221,8 +183,6 @@ def run(
     print(f"[GA-OSOW] Starting permit {permit_id} for {driver_name} ({tractor})")
     if load_details:
         print(f"[GA-OSOW] Load: {load_details.get('width','?')}W x {load_details.get('height','?')}H x {load_details.get('length','?')}L, {load_details.get('weight','?')} lbs, {load_details.get('axleCount','?')} axles")
-
-    _reset_screenshots(job_id)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(

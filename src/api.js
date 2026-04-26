@@ -1,5 +1,63 @@
 const API_BASE = "http://127.0.0.1:8000"; // always the backend url, change here when uploading to production only.
 
+// ── Auth token storage ────────────────────────────────────────────────
+const TOKEN_KEY = "permitflow_token";
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export function logout() {
+  setToken(null);
+  window.location.reload();
+}
+
+async function authFetch(path, options = {}) {
+  const token = getToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (res.status === 401) {
+    setToken(null);
+    window.location.reload();
+    throw new Error("Session expired");
+  }
+  return res;
+}
+
+export async function login(username, password) {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Login failed");
+  }
+  const data = await res.json();
+  setToken(data.token);
+  return data;
+}
+
+export async function verifyToken() {
+  const token = getToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ── Supported states ──────────────────────────────────────────────────
 export const STATES = [
   { code: "GA", label: "Georgia" },
@@ -24,6 +82,8 @@ export const PERMIT_TYPES = [
   { value: "fl_blanket_bulk",         label: "FL Blanket Bulk" },
   { value: "fl_blanket_inner_bridge", label: "FL Blanket Inner Bridge" },
   { value: "fl_blanket_flatbed",      label: "FL Blanket Flatbed" },
+  // Alabama-only — gated to AL in OrderForm
+  { value: "al_annual_osow",          label: "AL Annual OS/OW" },
 ];
 
 // ── Driver type constants ─────────────────────────────────────────────
@@ -49,20 +109,26 @@ export const COMPANY_DEFAULTS = {
 
 // ── API functions ─────────────────────────────────────────────────────
 export async function fetchDrivers() {
-  const res = await fetch(`${API_BASE}/api/drivers`);
+  const res = await authFetch(`/api/drivers`);
   return res.json();
 }
 
 export async function fetchFormFields(states, permitType) {
-  const res = await fetch(`${API_BASE}/api/permits/form-fields?states=${states.join(",")}&permitType=${permitType}`);
+  const res = await authFetch(`/api/permits/form-fields?states=${states.join(",")}&permitType=${permitType}`);
   const data = await res.json();
   return data.fields || [];
 }
 
-export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate, extraFields }) {
-  const payload = { driverIds, states, permitType, effectiveDate };
-  if (extraFields && Object.keys(extraFields).length > 0) payload.extraFields = extraFields;
-  const res = await fetch(`${API_BASE}/api/permits/order`, {
+export async function submitPermitOrder({ driverIds, states, permitType, effectiveDate, effectiveTime, extraFields }) {
+  const payload = {
+    driverIds,
+    states,
+    permitType,
+    effectiveDate,
+    effectiveTime: effectiveTime || undefined,
+    extraFields: (extraFields && Object.keys(extraFields).length > 0) ? extraFields : undefined,
+  };
+  const res = await authFetch(`/api/permits/order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -71,12 +137,12 @@ export async function submitPermitOrder({ driverIds, states, permitType, effecti
 }
 
 export async function fetchJobStatus(jobId) {
-  const res = await fetch(`${API_BASE}/api/permits/status/${jobId}`);
+  const res = await authFetch(`/api/permits/status/${jobId}`);
   return res.json();
 }
 
 export async function signalCaptchaSolved(jobId) {
-  const res = await fetch(`${API_BASE}/api/orders/${jobId}/captcha-solved`, {
+  const res = await authFetch(`/api/orders/${jobId}/captcha-solved`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
@@ -84,18 +150,18 @@ export async function signalCaptchaSolved(jobId) {
 }
 
 export async function fetchPermitHistory() {
-  const res = await fetch(`${API_BASE}/api/permits/history`);
+  const res = await authFetch(`/api/permits/history`);
   return res.json();
 }
 
 export async function fetchBlanketPermits() {
-  const res = await fetch(`${API_BASE}/api/permits/blankets`);
+  const res = await authFetch(`/api/permits/blankets`);
   return res.json();
 }
 
 // ── Driver CRUD ───────────────────────────────────────────────────────
 export async function createDriver(driver) {
-  const res = await fetch(`${API_BASE}/api/drivers`, {
+  const res = await authFetch(`/api/drivers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(driver),
@@ -104,7 +170,7 @@ export async function createDriver(driver) {
 }
 
 export async function updateDriver(id, updates) {
-  const res = await fetch(`${API_BASE}/api/drivers/${id}`, {
+  const res = await authFetch(`/api/drivers/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
@@ -113,6 +179,36 @@ export async function updateDriver(id, updates) {
 }
 
 export async function deleteDriver(id) {
-  const res = await fetch(`${API_BASE}/api/drivers/${id}`, { method: "DELETE" });
+  const res = await authFetch(`/api/drivers/${id}`, { method: "DELETE" });
+  return res.json();
+}
+
+// ── Mega insurance (shared by all F/LP/T drivers) ─────────────────────
+export async function fetchMegaInsurance() {
+  const res = await authFetch(`/api/drivers/mega-insurance`);
+  return res.json();
+}
+
+export async function updateMegaInsurance(insurance) {
+  const res = await authFetch(`/api/drivers/mega-insurance`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(insurance),
+  });
+  return res.json();
+}
+
+// ── Payment card (encrypted server-side) ─────────────────────────────
+export async function fetchPaymentCard() {
+  const res = await authFetch(`/api/settings/payment-card`);
+  return res.json();
+}
+
+export async function updatePaymentCard(card) {
+  const res = await authFetch(`/api/settings/payment-card`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(card),
+  });
   return res.json();
 }

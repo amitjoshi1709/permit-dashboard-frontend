@@ -4,27 +4,56 @@ export default {
   theme: {
     extend: {
       colors: {
-        navy: { DEFAULT: "#0D1B2A", 2: "#162234", 3: "#1D2E44", 4: "#243550" },
-        steel: "#2C4B6E",
-        mid: "#3A6898",
-        accent: { DEFAULT: "#4A9DDA", 2: "#5BB8F5" },
-        gold: { DEFAULT: "#F5A623", 2: "#FFB733" },
-        permit: {
-          green: "#27AE60",
-          green2: "#2ECC71",
-          red: "#E74C3C",
-          red2: "#FF6B5B",
-          orange: "#F39C12",
+        // Backgrounds — bone is the page, white is cards
+        bone: {
+          DEFAULT: "#EDE7DB",
+          50: "#FFFFFF",
+          200: "#DDD4C2",
         },
-        txt: { 1: "#EDF2F7", 2: "#A8BAD0", 3: "#6B8CAE" },
+        stone: {
+          100: "#E3D9C6",
+        },
+        // Inks — high-contrast warm charcoal
+        ink: {
+          DEFAULT: "#111315",
+          700: "#1E2228",
+          500: "#3D454D",
+          400: "#5A636C",
+        },
+        // Steel navy
+        steel: {
+          DEFAULT: "#1F3A52",
+          900: "#0E1E30",
+          800: "#152B42",
+          600: "#2D517A",
+        },
+        // Amber — primary accent
+        amber: {
+          DEFAULT: "#B5631F",
+          600: "#924E16",
+          500: "#C87A2E",
+          400: "#D9923F",
+        },
+        // Status
+        status: {
+          success: "#2E6A3B",
+          error:   "#8B3025",
+          warning: "#B5631F",
+        },
       },
       fontFamily: {
-        sans: ["DM Sans", "sans-serif"],
-        mono: ["DM Mono", "monospace"],
+        sans:  ["Inter", "system-ui", "sans-serif"],
+        serif: ["Merriweather", "Georgia", "serif"],
       },
-      borderColor: {
-        subtle: "rgba(255,255,255,0.07)",
-        subtle2: "rgba(255,255,255,0.12)",
+      letterSpacing: {
+        eyebrow: "0.22em",
+        btn:     "0.06em",
+      },
+      boxShadow: {
+        card: "0 18px 40px -24px rgba(28, 31, 36, 0.18)",
+      },
+      borderRadius: {
+        sm: "2px",
       },
     },
   },

@@ -4,6 +4,18 @@ from typing import Optional
 
 # ── Request Models ───────────────────────────────────────────────────
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class MegaInsuranceRequest(BaseModel):
+    insuranceCompany: Optional[str] = None
+    insuranceEffective: Optional[str] = None
+    insuranceExpiration: Optional[str] = None
+    policyNumber: Optional[str] = None
+
+
 class PermitOrderRequest(BaseModel):
     driverIds: list[int]
     states: list[str]
@@ -11,6 +23,18 @@ class PermitOrderRequest(BaseModel):
     effectiveDate: Optional[str] = None  # null/empty for FL Flatbed (runner computes it)
     extraFields: Optional[dict] = None  # dynamic fields from backend form schema
     effectiveTime: Optional[str] = "12:00"
+
+
+class PaymentCardUpdate(BaseModel):
+    cardholderName: str
+    cardNumber: str
+    expMonth: str
+    expYear: str
+    cvv: str
+    billingStreet: Optional[str] = ""
+    billingCity: Optional[str] = ""
+    billingState: Optional[str] = ""
+    billingZip: Optional[str] = ""
 
 
 class CaptchaSolvedRequest(BaseModel):

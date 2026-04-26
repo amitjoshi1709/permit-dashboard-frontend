@@ -1,20 +1,23 @@
 const VIEW_TITLES = {
   dashboard: "Dashboard",
-  order: "Order Permits",
-  history: "Permit History",
-  blankets: "Blanket Permits",
-  drivers: "Driver Database",
-  settings: "Payment & Settings",
+  order:     "Order Permits",
+  history:   "Permit History",
+  blankets:  "Blanket Permits",
+  drivers:   "Driver Database",
+  settings:  "Payment & Settings",
 };
 
 export default function Topbar({ activeView, onNewPermit }) {
+  const title = VIEW_TITLES[activeView] || VIEW_TITLES.dashboard;
   return (
-    <div className="bg-navy-2 border-b border-subtle px-7 py-3.5 flex items-center gap-4 sticky top-0 z-40">
-      <div className="text-base font-semibold">{VIEW_TITLES[activeView]}</div>
-      <div className="ml-auto flex items-center gap-2.5">
+    <div className="bg-bone border-b border-ink/15 px-8 lg:px-12 h-[80px] flex items-center gap-6 sticky top-0 z-40">
+      <h1 className="font-serif font-black text-2xl tracking-tight text-steel-900 leading-none">
+        {title}
+      </h1>
+      <div className="ml-auto flex items-center gap-3">
         <button
           onClick={onNewPermit}
-          className="bg-accent text-white border-none px-4 py-2 rounded-lg font-sans text-[13px] font-medium cursor-pointer transition-all hover:bg-accent-2 hover:-translate-y-px flex items-center gap-1.5"
+          className="bg-amber text-white border-none px-6 py-3 rounded-sm font-sans text-[11px] font-semibold uppercase tracking-[0.06em] cursor-pointer transition-colors hover:bg-amber-600"
         >
           + New Permit
         </button>

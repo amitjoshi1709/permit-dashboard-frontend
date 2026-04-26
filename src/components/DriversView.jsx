@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchDrivers, createDriver, updateDriver, deleteDriver, DRIVER_TYPES, COMPANY_TYPES, COMPANY_DEFAULTS } from "../api";
+import { fetchDrivers, createDriver, updateDriver, deleteDriver, fetchMegaInsurance, updateMegaInsurance, DRIVER_TYPES, COMPANY_TYPES, COMPANY_DEFAULTS } from "../api";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", tractor: "", driverType: "",
@@ -49,8 +49,8 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
     (isCompany || form.fein.trim());
 
   return (
-    <div className="px-[18px] py-5 border-b border-subtle bg-navy-3/30">
-      <div className="text-[11px] uppercase tracking-wide text-txt-3 font-medium mb-4">{title}</div>
+    <div className="px-[18px] py-5 border-b border-ink/15 bg-bone-3/30">
+      <div className="text-[11px] uppercase tracking-wide text-ink-400 font-medium mb-4">{title}</div>
 
       {/* Row 1: Name */}
       <div className="grid grid-cols-2 gap-3 mb-3">
@@ -61,7 +61,7 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
       {/* Row 2: Driver Type + Tractor */}
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">Driver Type</label>
+          <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">Driver Type</label>
           <select value={form.driverType} onChange={(e) => handleTypeChange(e.target.value)}>
             <option value="">— Select —</option>
             {DRIVER_TYPES.map((t) => (
@@ -84,18 +84,18 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
       </div>
 
       {/* Divider */}
-      <hr className="border-t border-subtle my-4" />
+      <hr className="border-t border-ink/15 my-4" />
 
       {/* Company info notice */}
       {form.driverType && isCompany && (
-        <div className="rounded-lg px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-accent/10 border border-accent/20 text-accent-2 flex items-start gap-2 mb-3">
+        <div className="rounded-sm px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-amber/10 border border-amber/30 text-amber-600 flex items-start gap-2 mb-3">
           <span className="text-sm flex-shrink-0 mt-px">i</span>
           <span>Company driver ({form.driverType}) — USDOT and insurance auto-filled with Mega Trucking defaults. No FEIN required.</span>
         </div>
       )}
 
       {form.driverType && !isCompany && (
-        <div className="rounded-lg px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-permit-orange/10 border border-permit-orange/25 text-[#FFD166] flex items-start gap-2 mb-3">
+        <div className="rounded-sm px-3.5 py-2.5 text-[12.5px] leading-relaxed bg-amber/10 border border-amber/30 text-amber-600 flex items-start gap-2 mb-3">
           <span className="text-sm flex-shrink-0 mt-px">⚠</span>
           <span>Independent driver ({form.driverType}) — enter their own USDOT, FEIN, and insurance information below.</span>
         </div>
@@ -121,7 +121,7 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
       </div>
 
       {/* Row 5: Insurance */}
-      <div className="text-[11px] uppercase tracking-wide text-txt-3 font-medium mb-2 mt-1">Insurance</div>
+      <div className="text-[11px] uppercase tracking-wide text-ink-400 font-medium mb-2 mt-1">Insurance</div>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <Field
           label="Company Name"
@@ -160,13 +160,13 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
         <button
           onClick={onSave}
           disabled={saving || !canSave}
-          className="bg-accent text-white border-none px-5 py-[9px] rounded-lg text-[13px] font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans disabled:bg-navy-3 disabled:text-txt-3 disabled:cursor-not-allowed"
+          className="bg-amber text-white border-none px-5 py-[9px] rounded-sm text-[13px] font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans disabled:bg-bone-3 disabled:text-ink-400 disabled:cursor-not-allowed"
         >
           {saving ? "Saving..." : "Save Driver"}
         </button>
         <button
           onClick={onCancel}
-          className="bg-transparent border border-subtle2 text-txt-2 px-5 py-[9px] rounded-lg text-[13px] cursor-pointer hover:bg-navy-3 hover:text-txt-1 transition-all font-sans"
+          className="bg-transparent border border-ink/20 text-ink-500 px-5 py-[9px] rounded-sm text-[13px] cursor-pointer hover:bg-bone-3 hover:text-steel-900 transition-all font-sans"
         >
           Cancel
         </button>
@@ -178,7 +178,7 @@ function DriverForm({ form, setForm, onSave, onCancel, saving, title }) {
 function Field({ label, value, onChange, placeholder, readOnly }) {
   return (
     <div>
-      <label className="block text-[11px] font-medium uppercase tracking-wide text-txt-3 mb-1.5">{label}</label>
+      <label className="block text-[11px] font-medium uppercase tracking-wide text-ink-400 mb-1.5">{label}</label>
       <input
         type="text"
         value={value}
@@ -200,6 +200,19 @@ export default function DriversView({ onToast }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [driverSearch, setDriverSearch] = useState("");
+
+  // Mega insurance (shared across all F/LP/T drivers)
+  const [megaInsurance, setMegaInsurance] = useState({
+    insuranceCompany: "", insuranceEffective: "",
+    insuranceExpiration: "", policyNumber: "",
+  });
+  const [editingMega, setEditingMega] = useState(false);
+  const [megaForm, setMegaForm] = useState({
+    insuranceCompany: "", insuranceEffective: "",
+    insuranceExpiration: "", policyNumber: "",
+  });
+  const [savingMega, setSavingMega] = useState(false);
 
   function load() {
     setLoading(true);
@@ -215,7 +228,37 @@ export default function DriversView({ onToast }) {
       });
   }
 
-  useEffect(() => { load(); }, []);
+  function loadMegaInsurance() {
+    fetchMegaInsurance()
+      .then((data) => setMegaInsurance(data || {}))
+      .catch(() => {});
+  }
+
+  useEffect(() => { load(); loadMegaInsurance(); }, []);
+
+  function startEditMega() {
+    setMegaForm({ ...megaInsurance });
+    setEditingMega(true);
+  }
+
+  function cancelEditMega() {
+    setEditingMega(false);
+  }
+
+  async function saveMegaInsurance() {
+    setSavingMega(true);
+    try {
+      const result = await updateMegaInsurance(megaForm);
+      onToast?.("✓", `Mega insurance updated · ${result.updated || 0} driver(s)`);
+      setEditingMega(false);
+      loadMegaInsurance();
+      load();
+    } catch {
+      onToast?.("⚠", "Failed to update Mega insurance");
+    } finally {
+      setSavingMega(false);
+    }
+  }
 
   function startEdit(driver) {
     setEditingId(driver.id);
@@ -289,27 +332,133 @@ export default function DriversView({ onToast }) {
     if (editingId) cancelEdit();
   }
 
+  const q = driverSearch.trim().toLowerCase();
+  const filteredDrivers = q
+    ? drivers.filter((d) => {
+        const name = `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase();
+        const tractor = (d.tractor || "").toLowerCase();
+        const type = (d.driverType || "").toLowerCase();
+        const id = String(d.id || "");
+        return name.includes(q) || tractor.includes(q) || type.includes(q) || id.includes(q);
+      })
+    : drivers;
+
   return (
-    <div className="bg-navy-2 border border-subtle rounded-[14px]">
-      <div className="px-[18px] py-3.5 border-b border-subtle flex items-center gap-2.5">
+    <div className="bg-white border border-ink/15">
+      <div className="px-[18px] py-3.5 border-b border-ink/15 flex items-center gap-2.5">
         <div className="text-[13.5px] font-semibold">Driver Database</div>
-        <span className="text-[11px] text-txt-3 bg-navy-3 rounded-[10px] px-2 py-0.5">
-          {drivers.length} drivers
+        <span className="text-[11px] text-ink-400 bg-bone-3 rounded-sm px-2 py-0.5">
+          {filteredDrivers.length}{q ? ` / ${drivers.length}` : ""} drivers
         </span>
         <div className="ml-auto flex gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={driverSearch}
+              onChange={(e) => setDriverSearch(e.target.value)}
+              placeholder="Search name, tractor, type..."
+              className="!w-[200px] !py-1.5 !px-2.5 !text-xs"
+            />
+            {driverSearch && (
+              <button
+                onClick={() => setDriverSearch("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-steel-900 bg-transparent border-none cursor-pointer text-sm leading-none"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <button
             onClick={load}
-            className="text-xs text-txt-3 hover:text-accent-2 transition-colors cursor-pointer bg-transparent border-none font-sans"
+            className="text-xs text-ink-400 hover:text-amber-600 transition-colors cursor-pointer bg-transparent border-none font-sans"
           >
             ↻ Refresh
           </button>
           <button
             onClick={() => { setShowAdd(true); cancelEdit(); setExpandedId(null); }}
-            className="bg-accent text-white border-none px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-accent-2 transition-all font-sans"
+            className="bg-amber text-white border-none px-3 py-1.5 rounded-sm text-xs font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans"
           >
             + Add Driver
           </button>
         </div>
+      </div>
+
+      {/* Mega insurance card — shared across all F/LP/T drivers */}
+      <div className="px-[18px] py-4 border-b border-ink/15 bg-amber/[0.04]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="text-[12px] font-semibold text-steel-900">Mega Trucking Insurance</div>
+          <span className="text-[10px] text-ink-400 bg-bone-3 rounded-sm px-1.5 py-0.5">
+            Shared by all F / LP / T drivers
+          </span>
+          {!editingMega && (
+            <button
+              onClick={startEditMega}
+              className="ml-auto bg-bone-3 border border-ink/15 text-ink-500 rounded-sm px-2.5 py-1 text-[11px] cursor-pointer hover:bg-bone-4 hover:text-amber-600 hover:border-amber/40 transition-all font-sans"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        {!editingMega ? (
+          <div className="grid grid-cols-4 gap-x-6 gap-y-2 text-[12px]">
+            <Detail label="Company" value={megaInsurance.insuranceCompany} />
+            <Detail label="Policy #" value={megaInsurance.policyNumber} mono />
+            <Detail label="Effective" value={megaInsurance.insuranceEffective} />
+            <Detail label="Expiration" value={megaInsurance.insuranceExpiration} />
+          </div>
+        ) : (
+          <div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <Field
+                label="Insurance Company"
+                value={megaForm.insuranceCompany}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceCompany: v }))}
+                placeholder="e.g. Prime Property and Casualty"
+              />
+              <Field
+                label="Policy Number"
+                value={megaForm.policyNumber}
+                onChange={(v) => setMegaForm((f) => ({ ...f, policyNumber: v }))}
+                placeholder="e.g. PC24040671"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <Field
+                label="Effective Date"
+                value={megaForm.insuranceEffective}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceEffective: v }))}
+                placeholder="MM/DD/YYYY"
+              />
+              <Field
+                label="Expiration Date"
+                value={megaForm.insuranceExpiration}
+                onChange={(v) => setMegaForm((f) => ({ ...f, insuranceExpiration: v }))}
+                placeholder="MM/DD/YYYY"
+              />
+            </div>
+            <div className="rounded-sm px-3.5 py-2 text-[11.5px] leading-relaxed bg-amber/10 border border-amber/30 text-amber-600 flex items-start gap-2 mb-3">
+              <span className="flex-shrink-0 mt-px">⚠</span>
+              <span>This will update the insurance info on every F / LP / T driver in Supabase.</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={saveMegaInsurance}
+                disabled={savingMega}
+                className="bg-amber text-white border-none px-5 py-[9px] rounded-sm text-[13px] font-medium cursor-pointer hover:bg-amber-600 transition-all font-sans disabled:bg-bone-3 disabled:text-ink-400 disabled:cursor-not-allowed"
+              >
+                {savingMega ? "Saving..." : "Update All Mega Drivers"}
+              </button>
+              <button
+                onClick={cancelEditMega}
+                disabled={savingMega}
+                className="bg-transparent border border-ink/20 text-ink-500 px-5 py-[9px] rounded-sm text-[13px] cursor-pointer hover:bg-bone-3 hover:text-steel-900 transition-all font-sans disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add driver form */}
@@ -326,63 +475,63 @@ export default function DriversView({ onToast }) {
 
       {/* Driver list */}
       {loading ? (
-        <div className="p-10 text-center text-txt-3 text-[13px]">Loading...</div>
-      ) : drivers.length === 0 ? (
-        <div className="text-center py-10 text-txt-3 text-[13px]">
-          <div className="text-[32px] mb-2.5">👤</div>
-          No drivers in the database.
+        <div className="p-10 text-center text-ink-400 text-[13px]">Loading...</div>
+      ) : filteredDrivers.length === 0 ? (
+        <div className="text-center py-10 text-ink-400 text-[13px]">
+          <div className="text-[32px] mb-2.5">{q ? "🔍" : "👤"}</div>
+          {q ? "No drivers match your search." : "No drivers in the database."}
         </div>
       ) : (
         <table className="w-full border-collapse">
           <thead>
-            <tr className="text-[11px] text-txt-3 font-medium uppercase tracking-wide bg-navy-3">
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[60px]">ID</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle">Driver</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[70px]">Type</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[90px]">Tractor</th>
-              <th className="text-left py-2.5 px-3.5 border-b border-subtle w-[100px]">USDOT</th>
-              <th className="text-right py-2.5 px-3.5 border-b border-subtle w-[200px]">Actions</th>
+            <tr className="text-[11px] text-ink-400 font-medium uppercase tracking-wide bg-bone-3">
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[60px]">ID</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15">Driver</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[70px]">Type</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[90px]">Tractor</th>
+              <th className="text-left py-2.5 px-3.5 border-b border-ink/15 w-[100px]">USDOT</th>
+              <th className="text-right py-2.5 px-3.5 border-b border-ink/15 w-[200px]">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {drivers.map((driver) => (
+            {filteredDrivers.map((driver) => (
               <>
-                <tr key={driver.id} className="hover:bg-navy-3/50 transition-colors">
-                  <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-xs text-txt-3">{driver.id}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle">
+                <tr key={driver.id} className="hover:bg-bone-3/50 transition-colors">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 font-mono text-xs text-ink-400">{driver.id}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15">
                     <div className="flex items-center gap-[7px]">
-                      <div className="w-6 h-6 rounded-full bg-steel flex items-center justify-center text-[9px] font-semibold text-accent-2 flex-shrink-0">
+                      <div className="w-6 h-6 rounded-full bg-stone-100 border border-ink/15 flex items-center justify-center text-[9px] font-semibold text-amber-600 flex-shrink-0">
                         {(driver.firstName || "")[0]}{(driver.lastName || "")[0]}
                       </div>
                       <span className="text-[13px]">{driver.firstName} {driver.lastName}</span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle">
-                    <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[11px] font-medium ${
-                      isCompanyType(driver.driverType) ? "bg-accent/15 text-accent-2" : "bg-gold/15 text-gold-2"
+                  <td className="py-2.5 px-3.5 border-b border-ink/15">
+                    <span className={`inline-flex items-center px-2 py-[3px] rounded-sm text-[11px] font-medium ${
+                      isCompanyType(driver.driverType) ? "bg-amber/15 text-amber-600" : "bg-stone-100 text-steel-900 border border-ink/15"
                     }`}>
                       {driver.driverType}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-[13px] text-txt-2">{driver.tractor}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle font-mono text-[12px] text-txt-3">{driver.usdot}</td>
-                  <td className="py-2.5 px-3.5 border-b border-subtle text-right">
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 font-mono text-[13px] text-ink-500">{driver.tractor}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 font-mono text-[12px] text-ink-400">{driver.usdot}</td>
+                  <td className="py-2.5 px-3.5 border-b border-ink/15 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button
                         onClick={() => toggleExpand(driver.id)}
-                        className="bg-navy-3 border border-subtle text-txt-2 rounded-md px-2.5 py-1 text-[11px] cursor-pointer hover:bg-navy-4 hover:text-txt-1 transition-all font-sans"
+                        className="bg-bone-3 border border-ink/15 text-ink-500 rounded-sm px-2.5 py-1 text-[11px] cursor-pointer hover:bg-bone-4 hover:text-steel-900 transition-all font-sans"
                       >
                         {expandedId === driver.id ? "Hide" : "Details"}
                       </button>
                       <button
                         onClick={() => startEdit(driver)}
-                        className="bg-navy-3 border border-subtle text-txt-2 rounded-md px-2.5 py-1 text-[11px] cursor-pointer hover:bg-navy-4 hover:text-accent-2 hover:border-accent transition-all font-sans"
+                        className="bg-bone-3 border border-ink/15 text-ink-500 rounded-sm px-2.5 py-1 text-[11px] cursor-pointer hover:bg-bone-4 hover:text-amber-600 hover:border-amber/40 transition-all font-sans"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(driver.id, `${driver.firstName} ${driver.lastName}`)}
-                        className="bg-permit-red/10 border border-permit-red/20 text-permit-red2 rounded-md px-2.5 py-1 text-[11px] cursor-pointer hover:bg-permit-red/20 transition-all font-sans"
+                        className="bg-[#9C3A2E]/10 border border-[#9C3A2E]/30 text-[#7A2C22] rounded-sm px-2.5 py-1 text-[11px] cursor-pointer hover:bg-[#9C3A2E]/20 transition-all font-sans"
                       >
                         Remove
                       </button>
@@ -393,7 +542,7 @@ export default function DriversView({ onToast }) {
                 {/* Expanded details row */}
                 {expandedId === driver.id && editingId !== driver.id && (
                   <tr key={`${driver.id}-detail`}>
-                    <td colSpan={6} className="border-b border-subtle bg-navy-3/30 px-3.5 py-4">
+                    <td colSpan={6} className="border-b border-ink/15 bg-bone-3/30 px-3.5 py-4">
                       <div className="grid grid-cols-4 gap-x-6 gap-y-3 text-[12px]">
                         <Detail label="Year" value={driver.year} />
                         <Detail label="Make" value={driver.make} />
@@ -413,7 +562,7 @@ export default function DriversView({ onToast }) {
                 {/* Edit form row */}
                 {editingId === driver.id && (
                   <tr key={`${driver.id}-edit`}>
-                    <td colSpan={6} className="border-b border-subtle p-0">
+                    <td colSpan={6} className="border-b border-ink/15 p-0">
                       <DriverForm
                         form={editForm}
                         setForm={setEditForm}
@@ -437,8 +586,8 @@ export default function DriversView({ onToast }) {
 function Detail({ label, value, mono }) {
   return (
     <div>
-      <div className="text-[10px] text-txt-3 uppercase tracking-wide font-medium mb-0.5">{label}</div>
-      <div className={`text-txt-1 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
+      <div className="text-[10px] text-ink-400 uppercase tracking-wide font-medium mb-0.5">{label}</div>
+      <div className={`text-steel-900 ${mono ? "font-mono" : ""}`}>{value || "—"}</div>
     </div>
   );
 }
