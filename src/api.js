@@ -1,4 +1,8 @@
-const API_BASE = "http://127.0.0.1:8000"; // always the backend url, change here when uploading to production only.
+// const API_BASE = "http://127.0.0.1:8000"; // always the backend url, change here when uploading to production only.
+
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://permit-dev-alb-221372248.us-east-1.elb.amazonaws.com";
 
 // ── Auth token storage ────────────────────────────────────────────────
 const TOKEN_KEY = "permitflow_token";
