@@ -2,7 +2,7 @@
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
-  "https://permit-dev-alb-221372248.us-east-1.elb.amazonaws.com";
+  "https://d1ijmhvrgz9gcb.cloudfront.net";
 
 // ── Auth token storage ────────────────────────────────────────────────
 const TOKEN_KEY = "permitflow_token";
